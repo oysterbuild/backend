@@ -1,0 +1,76 @@
+# Python bytecode
+app/**/__pycache__/
+app/**/*.py[cod]
+app/**/*$py.class
+
+# Distribution / packaging
+app/**/dist/
+app/**/build/
+app/**/*.egg-info/
+
+# Virtual environments
+venv/
+env/
+ENV/
+.env
+
+.hintrc/
+.command
+
+# FastAPI specific
+app/**/.pytest_cache/
+app/**/.coverage
+app/**/htmlcov/
+
+# Database
+app/**/*.db
+app/**/*.sqlite3
+
+# Logs
+app/**/logs/
+app/**/*.log
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+.dev/
+app/**/.env.local
+app/**/.env.development
+app/**/.env.test
+app/**/.env
+app/**/.env.production
+
+# Temporary files
+app/**/tmp/
+app/**/temp/
+
+# Alembic migrations (if you want to version them)
+# app/**/alembic/versions/
+
+
+# Redis dump file
+dump.rdb
+
+# Test files
+app/**/.pytest_cache/
+app/**/.coverage
+app/**/coverage.xml
+
+
+# Temporary files
+/tmp/
+
+verify_qr.py # This is a test file at my end, do not delete (iamAgbaCoder)
+qr.txt # Same as this 
+
+app/**/.__pycache__/
+app/__pycache__  
