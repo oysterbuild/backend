@@ -25,7 +25,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # 👇 LITTLE TEST (safe + fast)
       - name: Run basic app smoke test
         working-directory: app
         run: |
@@ -33,8 +32,6 @@ jobs:
           print("Running smoke test...")
           import sys
           print("Python OK:", sys.version)
-
-          # change this import if your entry file is different
           import main
           print("App import successful ✅")
           EOF
@@ -49,16 +46,20 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.HOSTINGER_HOST }}
-          username: ${{ secrets.HOSTINGER_USER }}
+          username: root
           key: ${{ secrets.HOSTINGER_SSH_KEY }}
-          port: ${{ secrets.HOSTINGER_PORT || 22 }}
+          port: 22
+          debug: true
           script: |
             set -e
 
-            cd /home/${{ secrets.HOSTINGER_USER }}/app
+            echo "Moving to app directory"
+            cd /root/app
 
-            echo "Pulling latest code"
-            git pull origin main
+            echo "Fetching latest code"
+            git fetch origin
+            git checkout staging
+            git pull origin staging
 
             echo "Creating .env file"
             cat > .env <<EOF
@@ -81,7 +82,7 @@ jobs:
             docker compose down || true
 
             echo "Building containers"
-            docker compose build --no-cache
+            docker compose build
 
             echo "Starting containers"
             docker compose up -d
