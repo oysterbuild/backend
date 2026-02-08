@@ -53,31 +53,36 @@ jobs:
           script: |
             set -e
 
-            # 1. Define the target directory
-            TARGET_DIR="/root/app"
-            REPO_URL="https://github.com/${{ github.repository }}.git"
+            # 1. Configuration
+            PROJECT_ROOT="/root/app"
+            DOCKER_DIR="app"
+            REPO_URL="https://${{ secrets.GH_PAT }}@github.com/oysterbuild/backend.git"
 
-            echo "Checking if directory exists..."
-            if [ ! -d "$TARGET_DIR" ]; then
-                echo "Directory $TARGET_DIR not found. Creating it and cloning repository..."
-                mkdir -p "$TARGET_DIR"
-                git clone -b staging "$REPO_URL" "$TARGET_DIR"
-                cd "$TARGET_DIR"
-            else
-                echo "Directory exists. Moving to app directory"
-                cd "$TARGET_DIR"
-                
-                # Check if it's actually a git repo, if not, clone into it
-                if [ ! -d ".git" ]; then
-                    git clone -b staging "$REPO_URL" .
-                else
-                    echo "Fetching latest code"
-                    git fetch origin staging
-                    git reset --hard origin/staging
-                fi
+            echo "Step 1: Syncing Code"
+            if [ ! -d "$PROJECT_ROOT" ]; then
+                echo "Directory $PROJECT_ROOT not found. Cloning repository..."
+                git clone -b staging "$REPO_URL" "$PROJECT_ROOT"
             fi
 
-            echo "Creating .env file"
+            cd "$PROJECT_ROOT"
+            echo "Updating code in $(pwd)"
+            git remote set-url origin "$REPO_URL"
+            git fetch origin staging
+            git reset --hard origin/staging
+
+            echo "Step 2: Moving to Docker directory"
+            # This moves us into /root/app/app
+            cd "$DOCKER_DIR"
+            echo "Current directory is: $(pwd)"
+
+            # Safety check: Verify docker-compose.yml exists here
+            if [ ! -f "docker-compose.yml" ]; then
+                echo "Error: docker-compose.yml not found in $(pwd)"
+                ls -la
+                exit 1
+            fi
+
+            echo "Step 3: Creating .env file"
             cat > .env <<EOF
             SECRET_KEY=${{ secrets.SECRET_KEY }}
             ASYNC_DATABASE_URL=${{ secrets.ASYNC_DATABASE_URL }}
@@ -94,11 +99,10 @@ jobs:
             PAYSTACK_PUBLIC_KEY=${{ secrets.PAYSTACK_PUBLIC_KEY }}
             EOF
 
-            echo "Stopping containers"
+            echo "Step 4: Running Docker"
+            # Using 'docker compose' (v2)
             docker compose down || true
-
-            echo "Building containers"
             docker compose build
-
-            echo "Starting containers"
             docker compose up -d
+
+            echo "✅ Deployment successful!"
