@@ -25,6 +25,20 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      # 👇 LITTLE TEST (safe + fast)
+      - name: Run basic app smoke test
+        working-directory: app
+        run: |
+          python - <<EOF
+          print("Running smoke test...")
+          import sys
+          print("Python OK:", sys.version)
+
+          # change this import if your entry file is different
+          import main
+          print("App import successful ✅")
+          EOF
+
   deploy:
     name: Deploy to Hostinger VPS
     needs: test
@@ -59,7 +73,7 @@ jobs:
             CLOUDINARY_API_SECRET=${{ secrets.CLOUDINARY_API_SECRET }}
             EMAIL_HOST_USER=${{ secrets.EMAIL_HOST_USER }}
             EMAIL_HOST_PASSWORD=${{ secrets.EMAIL_HOST_PASSWORD }}
-            PAYSTACK_SECRET_KEYL=${{ secrets.PAYSTACK_SECRET_KEY }}
+            PAYSTACK_SECRET_KEY=${{ secrets.PAYSTACK_SECRET_KEY }}
             PAYSTACK_PUBLIC_KEY=${{ secrets.PAYSTACK_PUBLIC_KEY }}
             EOF
 
