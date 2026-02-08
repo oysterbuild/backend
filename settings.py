@@ -7,8 +7,12 @@ load_dotenv()
 
 class Settings(BaseSettings):
     app_name: str = "OYSTERBUILD"
-    async_database_url: str = os.getenv("ASYNC_DATABASE_URL", " ")
-    database_url: str = os.getenv("DATABASE_URL", " ")
+    async_database_url: str = os.getenv(
+        "ASYNC_DATABASE_URL", "postgresql+asyncpg://testuser:testpass@db:5432/testdb"
+    )
+    database_url: str = os.getenv(
+        "DATABASE_URL", "postgresql+psycopg2://testuser:testpass@db:5432/testdb"
+    )
     jwt_token_expire_minutes: int = 120
     jwt_secret: str = os.getenv("JWT_SECRET_KEY", " ")
     jwt_algorithm: str = os.getenv("JWT_ALGORITHM", " ")
@@ -19,7 +23,8 @@ class Settings(BaseSettings):
     email_host_password: str = os.getenv("EMAIL_HOST_PASSWORD", " ")
     paystack_secret_key: str = os.getenv("PAYSTACK_SECRET_KEY", " ")
     paystack_public_key: str = os.getenv("PAYSTACK_PUBLIC_KEY", " ")
-
+    celery_broker_url: str = os.getenv("REDIS_URL", " ")
+    celery_result_backend: str = os.getenv("REDIS_URL", " ")
 
 def get_settings() -> Settings:
     return Settings()

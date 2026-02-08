@@ -1,8 +1,8 @@
 """added relations
 
-Revision ID: 871a03be39ec
+Revision ID: 1e184125edbf
 Revises: 
-Create Date: 2026-01-30 18:24:32.209557
+Create Date: 2026-02-08 05:32:45.476720
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '871a03be39ec'
+revision: str = '1e184125edbf'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -105,6 +105,7 @@ def upgrade() -> None:
     sa.Column('owner_id', sa.UUID(), nullable=False),
     sa.Column('plan_id', sa.UUID(), nullable=True),
     sa.Column('preferred_inspection_days', sa.ARRAY(sa.String()), nullable=True),
+    sa.Column('subscription_end_date', sa.Date(), nullable=True),
     sa.Column('preferred_inspection_window', sa.String(), nullable=True),
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=True),
@@ -158,7 +159,7 @@ def upgrade() -> None:
     sa.Column('status', sa.String(length=15), nullable=False),
     sa.Column('issued_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('due_date', sa.Date(), nullable=False),
-    sa.Column('paid_at', sa.DateTime(), nullable=True),
+    sa.Column('paid_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
@@ -174,17 +175,15 @@ def upgrade() -> None:
     op.create_index(op.f('ix_invoice_project_id'), 'invoice', ['project_id'], unique=False)
     op.create_table('planpackageusagecount',
     sa.Column('project_id', sa.UUID(), nullable=False),
-    sa.Column('package_id', sa.UUID(), nullable=True),
+    sa.Column('package_tag', sa.String(length=50), nullable=False),
     sa.Column('usage_count', sa.Integer(), nullable=False),
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
-    sa.ForeignKeyConstraint(['package_id'], ['package.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['project_id'], ['buildingproject.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_planpackageusagecount_id'), 'planpackageusagecount', ['id'], unique=False)
-    op.create_index(op.f('ix_planpackageusagecount_package_id'), 'planpackageusagecount', ['package_id'], unique=False)
     op.create_index(op.f('ix_planpackageusagecount_project_id'), 'planpackageusagecount', ['project_id'], unique=False)
     op.create_table('projectmember',
     sa.Column('project_id', sa.UUID(), nullable=False),
@@ -283,25 +282,6 @@ def upgrade() -> None:
     op.create_index(op.f('ix_paymenthistory_invoice_id'), 'paymenthistory', ['invoice_id'], unique=False)
     op.create_index(op.f('ix_paymenthistory_plan_id'), 'paymenthistory', ['plan_id'], unique=False)
     op.create_index(op.f('ix_paymenthistory_project_id'), 'paymenthistory', ['project_id'], unique=False)
-    op.create_table('projectpayment',
-    sa.Column('project_id', sa.UUID(), nullable=False),
-    sa.Column('milestone_id', sa.UUID(), nullable=True),
-    sa.Column('amount', sa.DECIMAL(precision=20, scale=2), nullable=False),
-    sa.Column('currency', sa.String(length=3), nullable=False),
-    sa.Column('status', sa.Enum('PENDING', 'PAID', 'APPROVED', name='payment_status_emum'), nullable=True),
-    sa.Column('notes', sa.Text(), nullable=True),
-    sa.Column('paid_at', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('id', sa.UUID(), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
-    sa.CheckConstraint("currency IN ('NGN', 'USD')", name='check_currency'),
-    sa.ForeignKeyConstraint(['milestone_id'], ['projectmilestone.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['project_id'], ['buildingproject.id'], ondelete='CASCADE'),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_projectpayment_id'), 'projectpayment', ['id'], unique=False)
-    op.create_index(op.f('ix_projectpayment_milestone_id'), 'projectpayment', ['milestone_id'], unique=False)
-    op.create_index(op.f('ix_projectpayment_project_id'), 'projectpayment', ['project_id'], unique=False)
     op.create_table('reportupload',
     sa.Column('report_id', sa.UUID(), nullable=False),
     sa.Column('file_url', sa.String(length=500), nullable=False),
@@ -318,21 +298,22 @@ def upgrade() -> None:
     op.create_table('transaction',
     sa.Column('invoice_id', sa.String(length=100), nullable=True),
     sa.Column('project_id', sa.UUID(), nullable=False),
-    sa.Column('reference', sa.String(length=100), nullable=False),
+    sa.Column('reference', sa.String(length=100), nullable=True),
+    sa.Column('authorization_url', sa.String(length=200), nullable=True),
     sa.Column('provider', sa.String(length=20), nullable=False),
-    sa.Column('provider_reference', sa.String(length=100), nullable=False),
+    sa.Column('provider_reference', sa.String(length=400), nullable=True),
     sa.Column('payment_method', sa.String(length=20), nullable=False),
     sa.Column('currency', sa.String(length=3), nullable=False),
     sa.Column('amount', sa.Numeric(precision=12, scale=2), nullable=False),
     sa.Column('status', sa.String(length=15), nullable=False),
-    sa.Column('paid_at', sa.DateTime(), nullable=False),
+    sa.Column('paid_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('provider_payload', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
     sa.CheckConstraint("currency IN ('NGN', 'USD')", name='check_transaction_currency'),
     sa.CheckConstraint("provider IN ('PAYSTACK','FLUTTERWAVE','STRIPE','PAYPAL','BANK_TRANSFER','CRYPTO')", name='check_transaction_provider'),
-    sa.CheckConstraint("status IN ('SUCCESS', 'FAILED', 'REFUNDED')", name='check_transaction_status'),
+    sa.CheckConstraint("status IN ('SUCCESS', 'FAILED', 'REFUNDED','PENDING')", name='check_transaction_status'),
     sa.ForeignKeyConstraint(['invoice_id'], ['invoice.invoice_id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['project_id'], ['buildingproject.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
@@ -341,6 +322,7 @@ def upgrade() -> None:
     op.create_index(op.f('ix_transaction_id'), 'transaction', ['id'], unique=False)
     op.create_index(op.f('ix_transaction_invoice_id'), 'transaction', ['invoice_id'], unique=False)
     op.create_index(op.f('ix_transaction_project_id'), 'transaction', ['project_id'], unique=False)
+    op.create_index(op.f('ix_transaction_provider_reference'), 'transaction', ['provider_reference'], unique=False)
     op.create_index(op.f('ix_transaction_reference'), 'transaction', ['reference'], unique=True)
     # ### end Alembic commands ###
 
@@ -349,6 +331,7 @@ def downgrade() -> None:
     """Downgrade schema."""
     # ### commands auto generated by Alembic - please adjust! ###
     op.drop_index(op.f('ix_transaction_reference'), table_name='transaction')
+    op.drop_index(op.f('ix_transaction_provider_reference'), table_name='transaction')
     op.drop_index(op.f('ix_transaction_project_id'), table_name='transaction')
     op.drop_index(op.f('ix_transaction_invoice_id'), table_name='transaction')
     op.drop_index(op.f('ix_transaction_id'), table_name='transaction')
@@ -356,10 +339,6 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_reportupload_report_id'), table_name='reportupload')
     op.drop_index(op.f('ix_reportupload_id'), table_name='reportupload')
     op.drop_table('reportupload')
-    op.drop_index(op.f('ix_projectpayment_project_id'), table_name='projectpayment')
-    op.drop_index(op.f('ix_projectpayment_milestone_id'), table_name='projectpayment')
-    op.drop_index(op.f('ix_projectpayment_id'), table_name='projectpayment')
-    op.drop_table('projectpayment')
     op.drop_index(op.f('ix_paymenthistory_project_id'), table_name='paymenthistory')
     op.drop_index(op.f('ix_paymenthistory_plan_id'), table_name='paymenthistory')
     op.drop_index(op.f('ix_paymenthistory_invoice_id'), table_name='paymenthistory')
@@ -381,7 +360,6 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_projectmember_id'), table_name='projectmember')
     op.drop_table('projectmember')
     op.drop_index(op.f('ix_planpackageusagecount_project_id'), table_name='planpackageusagecount')
-    op.drop_index(op.f('ix_planpackageusagecount_package_id'), table_name='planpackageusagecount')
     op.drop_index(op.f('ix_planpackageusagecount_id'), table_name='planpackageusagecount')
     op.drop_table('planpackageusagecount')
     op.drop_index(op.f('ix_invoice_project_id'), table_name='invoice')

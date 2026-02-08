@@ -97,7 +97,7 @@ class ProjectSetupService:
 
             # 5. Generate Payment Invoice
             invoice_resp = await self.payment_service.generate_payment_invoice(
-                project.id, plan_id
+                project.id, plan_id, project
             )
 
             await self.db.commit()
