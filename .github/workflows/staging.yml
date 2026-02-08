@@ -53,13 +53,29 @@ jobs:
           script: |
             set -e
 
-            echo "Moving to app directory"
-            cd /root/app
+            # 1. Define the target directory
+            TARGET_DIR="/root/app"
+            REPO_URL="https://github.com/${{ github.repository }}.git"
 
-            echo "Fetching latest code"
-            git fetch origin
-            git checkout staging
-            git pull origin staging
+            echo "Checking if directory exists..."
+            if [ ! -d "$TARGET_DIR" ]; then
+                echo "Directory $TARGET_DIR not found. Creating it and cloning repository..."
+                mkdir -p "$TARGET_DIR"
+                git clone -b staging "$REPO_URL" "$TARGET_DIR"
+                cd "$TARGET_DIR"
+            else
+                echo "Directory exists. Moving to app directory"
+                cd "$TARGET_DIR"
+                
+                # Check if it's actually a git repo, if not, clone into it
+                if [ ! -d ".git" ]; then
+                    git clone -b staging "$REPO_URL" .
+                else
+                    echo "Fetching latest code"
+                    git fetch origin staging
+                    git reset --hard origin/staging
+                fi
+            fi
 
             echo "Creating .env file"
             cat > .env <<EOF
