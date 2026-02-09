@@ -74,6 +74,29 @@ async def create_project(
     project_service: ProjectSetupService = Depends(get_project_service),
     current_user: dict = Depends(get_current_user),
 ):
+    """
+    args={
+        "name": "Project A",
+        "description": "Detailed project",
+        "project_type": "Residential",
+        "location_text": "Lagos",
+        "location_map": "https://maps.google.com/...",
+        "start_date": "2026-02-10",
+        "end_date": "2026-02-25",
+        "budget": 3000000,
+        "budget_currency": "USD",
+        "status": "Active",
+        "plan_id": "174b1898-da04-4e06-af3b-9f63380b7e36",
+        "preferred_inspection_days": [
+            "Monday",
+            "Wednesday"
+        ],
+        "preferred_inspection_window": "Morning",
+        "existing_image_ids": [
+            "831277cc-36df-4140-ab19-18b8dac7a1df"
+        ]
+    }
+    """
     logger.info(f"User {current_user.get('id')} started creating a project")
 
     try:
