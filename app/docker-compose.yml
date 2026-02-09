@@ -79,7 +79,7 @@ services:
       - "80:80"    # HTTP
       - "443:443"  # HTTPS (works later with domain)
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile   # <--- this is now correct
+      - ./Caddyfile:/etc/caddy/Caddyfile  # <--- this is now correct
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
