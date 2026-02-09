@@ -1,36 +1,92 @@
+# version: "3.9"
+
+# services:
+#   app:
+#     build: .
+#     container_name: fastapi_app
+#     # Run Alembic migrations before starting FastAPI
+#     command: sh -c "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+#     volumes:
+#       - .:/app
+#     ports:
+#       - "8000:8000"
+#     env_file:
+#       - .env
+#     depends_on:
+#       - redis
+
+#   celery:
+#     build: .
+#     container_name: celery_worker
+#     command: celery -A worker.celery_worker.celery worker --beat --loglevel=info 
+#     volumes:
+#       - .:/app
+#     env_file:
+#       - .env
+#     depends_on:
+#       - redis
+ 
+#   redis:
+#     image: redis:7-alpine
+#     container_name: redis
+#     # ports:
+#     #   - "6379:6379"
+
+
 version: "3.9"
 
 services:
+  # --- FastAPI App ---
   app:
     build: .
     container_name: fastapi_app
-    # Run Alembic migrations before starting FastAPI
-    command: sh -c "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+    # Run migrations first, then start FastAPI
+    command: sh -c "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000"
     volumes:
       - .:/app
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"  # Internal container port
     env_file:
       - .env
     depends_on:
       - redis
 
+  # --- Celery Worker ---
   celery:
     build: .
     container_name: celery_worker
-    command: celery -A worker.celery_worker.celery worker --beat --loglevel=info 
+    command: celery -A worker.celery_worker.celery worker --beat --loglevel=info
     volumes:
       - .:/app
     env_file:
       - .env
     depends_on:
       - redis
- 
+
+  # --- Redis ---
   redis:
     image: redis:7-alpine
     container_name: redis
-    # ports:
-    #   - "6379:6379"
+    volumes:
+      - redis_data:/data
 
+  # --- Caddy Reverse Proxy ---
+  caddy:
+    image: caddy:latest
+    container_name: caddy_proxy
+    restart: always
+    ports:
+      - "80:80"    # HTTP
+      - "443:443"  # HTTPS (works once you have a domain)
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
 
-
+# --- Persistent volumes ---
+volumes:
+  redis_data:
+  caddy_data:
+  caddy_config:
