@@ -61,14 +61,14 @@ jobs:
             echo "Step 1: Syncing Code"
             if [ ! -d "$PROJECT_ROOT" ]; then
                 echo "Directory $PROJECT_ROOT not found. Cloning repository..."
-                git clone -b staging "$REPO_URL" "$PROJECT_ROOT"
+                git clone -b main "$REPO_URL" "$PROJECT_ROOT"
             fi
 
             cd "$PROJECT_ROOT"
             echo "Updating code in $(pwd)"
             git remote set-url origin "$REPO_URL"
-            git fetch origin staging
-            git reset --hard origin/staging
+            git fetch origin main
+            git reset --hard origin/main
 
             echo "Step 2: Moving to Docker directory"
             # This moves us into /root/app/app
@@ -84,9 +84,9 @@ jobs:
 
             echo "Step 3: Creating .env file"
             cat > .env <<EOF
-            ASYNC_DATABASE_URL=${{ secrets.ASYNC_DATABASE_URL }}
-            DATABASE_URL=${{ secrets.DATABASE_URL }}
-            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            ASYNC_DATABASE_URL=${{ secrets.PROD_ASYNC_DATABASE_URL }}
+            DATABASE_URL=${{ secrets.PROD_DATABASE_URL }}
+            JWT_SECRET=${{ secrets.PROD_JWT_SECRET }}
             JWT_ALGORITHM=${{ secrets.JWT_ALGORITHM }}
             REDIS_URL=${{ secrets.REDIS_URL }}
             CLOUDINARY_CLOUD_NAME=${{ secrets.CLOUDINARY_CLOUD_NAME }}
