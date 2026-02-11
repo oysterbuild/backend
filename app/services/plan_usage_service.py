@@ -1,9 +1,13 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from utils.loggers import setup_logger
-from sqlalchemy import select, exists
+from sqlalchemy import select, exists,update
 from models.building_project import BuildingProject
 from models.plans import PlanPackageUsageCount, Package
 from fastapi import HTTPException, status
+from models.plans import PaymentHistory,Plan
+from datetime import datetime,timezone,timedelta
+from models.users import User
+from services.email_service import get_email_service
 
 logger = setup_logger("Project_Plan_Usage_Service")
 
@@ -237,6 +241,107 @@ class ProjectPlanUsageService:
             )
             # create it new
         else:
-            print(usage.usage_count)
             usage.usage_count += 1
             self.db.add(usage)
+
+
+    async def schedule_plan_expiration(self):
+        try:
+            now = datetime.now(timezone.utc).date()
+            logger.info(f"Running schedule_plan_expiration task for date: {now}")
+
+            # 1. Update BuildingProjects directly
+            # The database handles the locking and filtering in one step
+            project_stmt = (
+                update(BuildingProject)
+                .where(
+                    BuildingProject.payment_status == "Active",
+                    BuildingProject.subscription_end_date <= now
+                )
+                .values(payment_status="Expired")
+                # This returns the count of rows affected
+                .execution_options(synchronize_session=False) 
+            )
+            
+            project_result = await self.db.execute(project_stmt)
+            logger.info(f"Expired {project_result.rowcount} BuildingProjects")
+
+            # 2. Update PaymentHistory directly
+            history_stmt = (
+                update(PaymentHistory)
+                .where(
+                    PaymentHistory.status == "Active",
+                    PaymentHistory.next_billing_date <= now
+                )
+                .values(status="Expired")
+                .execution_options(synchronize_session=False)
+            )
+            
+            history_result = await self.db.execute(history_stmt)
+            logger.info(f"Expired {history_result.rowcount} PaymentHistory records")
+
+            # Commit both updates
+            await self.db.commit()
+            logger.info("schedule_plan_expiration task completed successfully")
+
+        except Exception as e:
+            logger.exception(f"Unexpected error in schedule_plan_expiration: {e}")
+            await self.db.rollback()
+            raise e
+
+    async def send_plan_expiration_reminders(self):
+        try:
+            today = datetime.now(timezone.utc).date()
+            logger.info(f"Running plan expiration reminders for date: {today}")
+
+            day_1 = today + timedelta(days=1)
+            day_2 = today + timedelta(days=2)
+            logger.debug(f"Checking subscriptions ending on: {day_1} and {day_2}")
+
+            stmt = (
+                select(
+                    BuildingProject.name.label("project_name"),
+                    BuildingProject.subscription_end_date.label("end_date"),
+                    User.email,
+                    User.first_name,
+                    Plan.name.label("plan_name"),
+                )
+                .join(User, BuildingProject.owner_id == User.id)
+                .join(Plan, BuildingProject.plan_id == Plan.id)
+                .where(
+                    BuildingProject.payment_status == "Active",
+                    BuildingProject.subscription_end_date.in_([day_1, day_2])
+                )
+            )
+
+            result = await self.db.execute(stmt)
+            records = result.all()
+            logger.info(f"Found {len(records)} subscriptions expiring soon")
+
+            for project_name, end_date, email, first_name, plan_name in records:
+                days_left = (end_date - today).days
+                logger.debug(f"Preparing reminder for {email} ({project_name}), days left: {days_left}")
+
+                if email:
+                    context = {
+                        "user_name": first_name,
+                        "plan_name": plan_name,
+                        "project_name": project_name,
+                        "days_left": days_left,
+                        "expiration_date": end_date
+                    }
+
+                    try:
+                        await get_email_service().send_emails(
+                            subject="Your Subscription Is About to Expire",
+                            recipient=[email],
+                            template_name="subscription_expires.html",
+                            context=context
+                        )
+                        logger.info(f"Sent reminder email to {email} for project {project_name}")
+                    except Exception as email_error:
+                        logger.error(f"Failed to send email to {email}: {email_error}")
+
+        except Exception as e:
+            logger.exception(f"Error sending plan expiration reminders: {e}")
+            raise e
