@@ -20,7 +20,8 @@ services:
   celery:
     build: .
     container_name: celery_worker
-    command: celery -A worker.celery_worker.celery worker --beat --loglevel=info
+    command: >
+      sh -c "rm -f celerybeat-schedule && celery -A celery_worker worker --beat -l info"
     volumes:
       - .:/app
     env_file:
