@@ -31,6 +31,9 @@ from models.plans import PaymentHistory, Plan
 from services.payment_services import PaymentService
 from models.payments import Invoice
 from models.media_upload import ProjectUpload, ReportUpload
+from datetime import datetime,timezone,timedelta
+from models.users import User
+from services.email_service import get_email_service
 
 logger = setup_logger("Project_Service")
 
@@ -938,3 +941,5 @@ class ProjectSetupService:
             raise Exception(
                 f"Internal server error while fetching single payment record: {str(e)}"
             )
+
+

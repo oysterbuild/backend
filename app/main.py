@@ -28,10 +28,10 @@ logger = setup_logger(__name__, log_level)
 async def lifespan(app: FastAPI):
     logger.info("Starting Oysterbuild API...")
     try:
-        logger.info("Starting Oysterbuild API Completed...")
+        logger.info("Starting Oysterbuild API...")
 
         # load permission on app start.......
-        logger.info("Loading Permission on App starts")
+        # logger.info("Loading Permission on App starts")
         # asyncio.create_task(seed_roles_permissions())
 
         # asyncio.create_task(seed_plans())
