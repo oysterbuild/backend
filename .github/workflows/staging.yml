@@ -102,6 +102,11 @@ jobs:
             echo "Step 4: Running Docker"
             # Using 'docker compose' (v2)
             docker compose down || true
+
+            # 2. DELETE the stuck schedule files (as root on the host)
+            # This is the key fix for the Permission Denied error
+            rm -f celerybeat-schedule* 
+            
             docker compose build
             docker compose up -d
 

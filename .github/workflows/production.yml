@@ -94,13 +94,18 @@ jobs:
             CLOUDINARY_API_SECRET=${{ secrets.CLOUDINARY_API_SECRET }}
             EMAIL_HOST_USER=${{ secrets.EMAIL_HOST_USER }}
             EMAIL_HOST_PASSWORD=${{ secrets.EMAIL_HOST_PASSWORD }}
-            PAYSTACK_SECRET_KEY=${{ secrets.PAYSTACK_SECRET_KEY }}
-            PAYSTACK_PUBLIC_KEY=${{ secrets.PAYSTACK_PUBLIC_KEY }}
+            PAYSTACK_SECRET_KEY=${{ secrets.PROD_PAYSTACK_SECRET_KEY }}
+            PAYSTACK_PUBLIC_KEY=${{ secrets.PROD_PAYSTACK_PUBLIC_KEY }}
             EOF
 
             echo "Step 4: Running Docker"
             # Using 'docker compose' (v2)
             docker compose down || true
+
+            # 2. DELETE the stuck schedule files (as root on the host)
+            # This is the key fix for the Permission Denied error
+            rm -f celerybeat-schedule* 
+            
             docker compose build
             docker compose up -d
 
