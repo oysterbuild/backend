@@ -31,10 +31,10 @@ async def lifespan(app: FastAPI):
         logger.info("Starting Oysterbuild API...")
 
         # load permission on app start.......
-        # logger.info("Loading Permission on App starts")
-        # asyncio.create_task(seed_roles_permissions())
+        logger.info("Loading Permission on App starts")
+        asyncio.create_task(seed_roles_permissions())
 
-        # asyncio.create_task(seed_plans())
+        asyncio.create_task(seed_plans())
 
     except Exception as e:
         logger.error(f"Error during startup: {str(e)}")
