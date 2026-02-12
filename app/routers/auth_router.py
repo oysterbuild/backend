@@ -213,7 +213,7 @@ async def user_me(
         request_body = {
             "first_name": first_name,
             "last_name": last_name,
-            "image_url": profile_pic_url["image_url"],
+            "image_url": profile_pic_url.get("image_url") if  profile_pic_url else None ,
         }
 
         response = await auth_service.update_user_profile(request_body, user_id)
