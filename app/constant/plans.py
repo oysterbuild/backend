@@ -45,7 +45,7 @@ plans = [
         "frequency": "Monthly",
         "plan_status": "Paid",
         "packages": [
-            {"name": "Reports", "count": None, "tag": "reports", "is_unlimited": True},
+            {"name": "Reports", "count": 0, "tag": "reports", "is_unlimited": True},
         ],
     },
 ]
