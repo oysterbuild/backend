@@ -206,12 +206,6 @@ class ProjectSetupService:
                 "message": "Projects fetched successfully",
             }
 
-            return {
-                "meta_data": {"limit": limit, "page": page, "total": total},
-                "data": result.scalars().all(),
-                "message": "Projects fetched successfully",
-            }
-
         except Exception as e:
             logger.error(f"[PROJECT_LIST] Error for User {user_id}: {str(e)}")
             raise Exception(f"Failed to fetch projects: {str(e)}")
@@ -253,20 +247,25 @@ class ProjectSetupService:
                 .order_by(ProjectReport.report_date.desc())
                 .limit(2)
             )
+
+            #Get the report for the project
             project.recents_report = (
                 (await self.db.execute(stmt_recent_report)).scalars().all()
             )
 
-            # Package Checks
-            project.has_storage_package = await self.package_useage.has_storage_package(
+            #Get the plan Objects
+            project.plan = await self.db.get(Plan,project.plan_id) if project.plan_id else {}
+
+            #Determine is he can still post report for the project
+            project.has_report_package = (await self.package_useage.has_report_package(
                 project_id
-            )
-            project.has_report_package = await self.package_useage.has_report_package(
-                project_id
-            )
-            project.has_member_invitation_package = (
-                await self.package_useage.has_member_invitation_package(project_id)
-            )
+            ))
+
+            #only the owner has this actions
+            project.has_report_action = (await self.perms_role.has_project_permission(user_id,project_id,CAN_MANAGE_REPORT))
+
+            # Only project owner can see this
+            project.has_payment_action = (True if str(project.owner_id) == user_id else False)
 
             # Media
             project.images = await self.media_upload.get_uploaded_project_media(

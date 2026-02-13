@@ -252,7 +252,7 @@ async def delete_project(
 async def projects(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
-    project_status: str | None = Query(None, description="Filter by project status"),
+    project_status: Optional[Literal["Active","Pending","Draft"]] = Query(None, description="Filter by project status"),
     project_service: "ProjectSetupService" = Depends(get_project_service),
     current_user: dict = Depends(get_current_user),
 ):
