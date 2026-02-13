@@ -556,12 +556,14 @@ async def generate_presigned_url(
 @router.get("/{project_id}/payment/history")
 async def get_subscriptions(
     project_id: str,
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
     project_service: ProjectSetupService = Depends(get_project_service),
     current_user: dict = Depends(get_current_user),
 ):
     try:
         user_id = str(current_user.get("id"))
-        response = await project_service.payments_history(project_id, user_id)
+        response = await project_service.payments_history(project_id, user_id,page,limit)
         # Get all subscription payments:
         return response
     except HTTPException as e:

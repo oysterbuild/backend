@@ -12,9 +12,9 @@ from settings import get_settings
 from settings import Settings
 from typing import Any, Dict, Optional
 import httpx
-from models.plans import PaymentHistory
+from models.plans import PaymentHistory,PlanPackageUsageCount
 from dateutil.relativedelta import relativedelta
-from sqlalchemy import select, func, exists, update
+from sqlalchemy import select, func, exists, update,delete
 from helpers.payments import handle_success_payment, handle_failed_payment
 from services.email_service import get_email_service
 from helpers.constant import get_next_cycle_date
@@ -515,6 +515,13 @@ class PaymentService:
             )
             project.payment_status = "Active"
             project.plan_id = plan_id
+
+            #clear all usage:
+            delete_stmt = delete(PlanPackageUsageCount).where(
+                PlanPackageUsageCount.project_id == project_id
+            )
+
+            await self.db.execute(delete_stmt)
 
         # -------------------------
         # Payment history handling
