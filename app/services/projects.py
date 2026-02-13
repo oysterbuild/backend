@@ -924,6 +924,13 @@ class ProjectSetupService:
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="Project Id Doesnt Exist",
                 )
+
+            if str(user_id) != str(project.owner_id):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=self.permission,
+                )
+
             # Generate Invoice,Tag the project has pending
             invoice_id = await self.payment_service.generate_payment_invoice(
                 project_id, plan_id, project
