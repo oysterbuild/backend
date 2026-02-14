@@ -37,6 +37,7 @@ def get_payment_service(db: AsyncSession = Depends(get_database)) -> PaymentServ
 def get_plan_service(db: AsyncSession = Depends(get_database)) -> PaymentService:
     return PlansService(db=db)
 
+
 @router.post("/invoice")
 async def roles(
     invoice_id: str = File(..., description="invoice id"),
@@ -79,15 +80,10 @@ async def paystack_webhook_event(
     # 3. Parse the JSON data from the request
     payload = await request.json()
 
-    event: str = payload.get("event")
-    data: dict = payload.get("data", {})
+    # event: str = payload.get("event")
+    # data: dict = payload.get("data", {})
 
     await payment_service.payment_webhook(payload, "PAYSTACK")
-
-    # if event == "charge.success":
-
-    # Safely get the reference
-    # reference: str = data.get("reference") or data.get("refund_reference")
 
     # Your logic here...
     return {"status": "success"}

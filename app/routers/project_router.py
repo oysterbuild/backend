@@ -75,6 +75,10 @@ async def create_project(
     current_user: dict = Depends(get_current_user),
 ):
     """
+    Update a project with a JSON payload and multiple images.
+
+    **Required JSON Payload Structure for `project_data` field:**
+    ```json
     args={
         "name": "Project A",
         "description": "Detailed project",
@@ -92,10 +96,8 @@ async def create_project(
             "Wednesday"
         ],
         "preferred_inspection_window": "Morning",
-        "existing_image_ids": [
-            "831277cc-36df-4140-ab19-18b8dac7a1df"
-        ]
     }
+    ```
     """
     logger.info(f"User {current_user.get('id')} started creating a project")
 
@@ -165,28 +167,34 @@ async def update_project(
     project_data: str = Form(
         ...,
         description="JSON payload for project data",
-        json_schema_extra={
-            "name": "Project A",
-            "description": "Detailed project",
-            "project_type": "Residential",
-            "location_text": "Lagos",
-            "location_map": "https://maps.google.com/...",
-            "start_date": "2026-01-25T10:00:00",
-            "end_date": "2026-02-25T10:00:00",
-            "budget": 500000,
-            "budget_currency": "NGN",
-            "status": "Active",
-            "plan_id": "c56a4180-65aa-42ec-a945-5fd21dec0538",
-            "preferred_inspection_days": ["Monday", "Wednesday"],
-            "preferred_inspection_window": "Morning",
-            "existing_image_ids": ["image1_UUID", "image2_UUID"],
-        },
-        # ),
     ),
     images: List[UploadFile] = File([]),
     project_service: ProjectSetupService = Depends(get_project_service),
     current_user: dict = Depends(get_current_user),
 ):
+    """
+    Update a project with a JSON payload and multiple images.
+
+    **Required JSON Payload Structure for `project_data` field:**
+    ```json
+    {
+        "name": "Project A",
+        "description": "Detailed project",
+        "project_type": "Residential",
+        "location_text": "Lagos",
+        "location_map": "https://maps.google.com/...",
+        "start_date": "2026-01-25T10:00:00",
+        "end_date": "2026-02-25T10:00:00",
+        "budget": 500000,
+        "budget_currency": "NGN",
+        "status": "Active",
+        "plan_id": "c56a4180-65aa-42ec-a945-5fd21dec0538",
+        "preferred_inspection_days": ["Monday", "Wednesday"],
+        "preferred_inspection_window": "Morning",
+        "existing_image_ids": ["uuid1", "uuid2"]
+    }
+    ```
+    """
     try:
         user_id = str(current_user.get("id"))
 
