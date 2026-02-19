@@ -59,6 +59,9 @@ class PlanPackageUsageCount(BaseModel):
     project_id = Column(
         UUID(as_uuid=True), ForeignKey("buildingproject.id"), nullable=False, index=True
     )
+    payment_history = Column(
+        UUID(as_uuid=True), ForeignKey("paymenthistory.id"), nullable=True, index=True
+    )
     package_tag = Column(String(50), nullable=False)
     usage_count = Column(Integer(), nullable=False, default=0)
 
