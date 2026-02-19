@@ -99,15 +99,32 @@ jobs:
             PAYSTACK_PUBLIC_KEY=${{ secrets.PAYSTACK_PUBLIC_KEY }}
             EOF
 
+            echo "Step 3: Deploying with Zero Downtime"
+
             echo "Step 4: Running Docker"
             # Using 'docker compose' (v2)
-            docker compose down || true
+            # docker compose down || true
+
+            # 1. Pull/Build new images while the old ones are still running
+
+            docker compose build
+
+            # 2. Update the containers. 
+            # Docker will only recreate containers that have changes.
+            # The '--remove-orphans' cleans up old services not in the compose file.
+            
+            docker compose up -d --remove-orphans
 
             # 2. DELETE the stuck schedule files (as root on the host)
             # This is the key fix for the Permission Denied error
+
             rm -f celerybeat-schedule* 
             
-            docker compose build
-            docker compose up -d
+            # 4. Cleanup: Remove old/dangling images to save disk space on VPS
+
+            docker image prune -f
+
+            # docker compose build
+            # docker compose up -d
 
             echo "✅ Deployment successful!"
