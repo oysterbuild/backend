@@ -563,7 +563,9 @@ async def generate_presigned_url(
 
 
 # ----------------PROJECT PAYMENT -----------------
-@router.get("/{project_id}/payment/history")
+@router.get(
+    "/{project_id}/payment/history", description="This shows the list of all payments"
+)
 async def get_subscriptions(
     project_id: str,
     page: int = Query(1, ge=1),
