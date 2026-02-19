@@ -58,8 +58,11 @@ jobs:
             # ── 1. Install docker-rollout if missing ──────────────────────
             mkdir -p ~/.docker/cli-plugins
             if [ ! -f ~/.docker/cli-plugins/docker-rollout ]; then
-              curl -fsSL https://github.com/wowu/docker-rollout/releases/latest/download/docker-rollout_linux_amd64 \
-                -o ~/.docker/cli-plugins/docker-rollout
+              ROLLOUT_URL=$(curl -fsSL https://api.github.com/repos/wowu/docker-rollout/releases/latest \
+                | grep "browser_download_url" \
+                | grep "linux-amd64" \
+                | cut -d '"' -f 4)
+              curl -fsSL "$ROLLOUT_URL" -o ~/.docker/cli-plugins/docker-rollout
               chmod +x ~/.docker/cli-plugins/docker-rollout
             fi
 
@@ -120,7 +123,6 @@ jobs:
             # ── 9. Cleanup ─────────────────────────────────────────────────
             docker image prune -f
             echo "✅ Deployment complete!"
-
           # script: |
           #   set -e
 
