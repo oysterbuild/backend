@@ -9,6 +9,10 @@ ENV PATH="/opt/venv/bin:$PATH"
 WORKDIR /app
 
 # 2. Install system dependencies
+# RUN apt-get update && apt-get install -y \
+#     build-essential \
+#     && rm -rf /var/lib/apt/lists/*
+
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
