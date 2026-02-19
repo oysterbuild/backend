@@ -77,6 +77,7 @@ jobs:
             git remote set-url origin "$REPO_URL"
             git fetch origin staging
             git reset --hard origin/staging
+            git clean -fd  # <--- NEW: Removes any untracked files
 
             cd "$DOCKER_DIR"
 
