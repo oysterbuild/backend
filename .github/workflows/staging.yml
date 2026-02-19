@@ -51,40 +51,36 @@ jobs:
           key: ${{ secrets.HOSTINGER_SSH_KEY }}
           port: 22
           debug: true
+
           script: |
             set -e
 
-            # 1. Configuration
+            # ── 1. Install docker-rollout if missing ──────────────────────
+            mkdir -p ~/.docker/cli-plugins
+            if [ ! -f ~/.docker/cli-plugins/docker-rollout ]; then
+              curl -fsSL https://github.com/wowu/docker-rollout/releases/latest/download/docker-rollout_linux_amd64 \
+                -o ~/.docker/cli-plugins/docker-rollout
+              chmod +x ~/.docker/cli-plugins/docker-rollout
+            fi
+
+            # ── 2. Sync code ──────────────────────────────────────────────
             PROJECT_ROOT="/root/app"
             DOCKER_DIR="app"
             REPO_URL="https://${{ secrets.GH_PAT }}@github.com/oysterbuild/backend.git"
 
-            echo "Step 1: Syncing Code"
-            if [ ! -d "$PROJECT_ROOT" ]; then
-                echo "Directory $PROJECT_ROOT not found. Cloning repository..."
-                git clone -b staging "$REPO_URL" "$PROJECT_ROOT"
+            if [ ! -d "$PROJECT_ROOT/.git" ]; then
+              git clone -b staging "$REPO_URL" "$PROJECT_ROOT"
             fi
 
             cd "$PROJECT_ROOT"
-            echo "Updating code in $(pwd)"
             git remote set-url origin "$REPO_URL"
             git fetch origin staging
             git reset --hard origin/staging
 
-            echo "Step 2: Moving to Docker directory"
-            # This moves us into /root/app/app
             cd "$DOCKER_DIR"
-            echo "Current directory is: $(pwd)"
 
-            # Safety check: Verify docker-compose.yml exists here
-            if [ ! -f "docker-compose.yml" ]; then
-                echo "Error: docker-compose.yml not found in $(pwd)"
-                ls -la
-                exit 1
-            fi
-
-            echo "Step 3: Creating .env file"
-            cat > .env <<EOF
+            # ── 3. Write .env ─────────────────────────────────────────────
+            cat > .env <<'ENVEOF'
             ASYNC_DATABASE_URL=${{ secrets.ASYNC_DATABASE_URL }}
             DATABASE_URL=${{ secrets.DATABASE_URL }}
             JWT_SECRET=${{ secrets.JWT_SECRET }}
@@ -97,34 +93,106 @@ jobs:
             EMAIL_HOST_PASSWORD=${{ secrets.EMAIL_HOST_PASSWORD }}
             PAYSTACK_SECRET_KEY=${{ secrets.PAYSTACK_SECRET_KEY }}
             PAYSTACK_PUBLIC_KEY=${{ secrets.PAYSTACK_PUBLIC_KEY }}
-            EOF
+            ENVEOF
 
-            echo "Step 3: Deploying with Zero Downtime"
+            # ── 4. Build new image (old container still serving) ──────────
+            echo "▶ Building..."
+            docker compose build app
 
-            echo "Step 4: Running Docker"
-            # Using 'docker compose' (v2)
-            # docker compose down || true
+            # ── 5. Run migrations (one-shot, before cutover) ──────────────
+            echo "▶ Running migrations..."
+            docker compose run --rm app alembic upgrade head
+            echo "✅ Migrations done"
 
-            # 1. Pull/Build new images while the old ones are still running
+            # ── 6. Zero-downtime rollout ───────────────────────────────────
+            echo "▶ Rolling out app..."
+            docker rollout app
+            echo "✅ App rolled out"
 
-            docker compose build
+            # ── 7. Restart celery (no traffic, safe to stop/start) ────────
+            echo "▶ Restarting celery..."
+            docker compose up -d --no-deps --build celery
 
-            # 2. Update the containers. 
-            # Docker will only recreate containers that have changes.
-            # The '--remove-orphans' cleans up old services not in the compose file.
-            
-            docker compose up -d --remove-orphans
+            # ── 8. Caddy picks up new app container IP automatically ───────
+            # No restart needed — docker-rollout preserves the container name
+            # so Caddy's upstream reference (fastapi_app) stays valid
 
-            # 2. DELETE the stuck schedule files (as root on the host)
-            # This is the key fix for the Permission Denied error
-
-            rm -f celerybeat-schedule* 
-            
-            # 4. Cleanup: Remove old/dangling images to save disk space on VPS
-
+            # ── 9. Cleanup ─────────────────────────────────────────────────
             docker image prune -f
+            echo "✅ Deployment complete!"
 
-            # docker compose build
-            # docker compose up -d
+          # script: |
+          #   set -e
 
-            echo "✅ Deployment successful!"
+          #   # 1. Configuration
+          #   PROJECT_ROOT="/root/app"
+          #   DOCKER_DIR="app"
+          #   REPO_URL="https://${{ secrets.GH_PAT }}@github.com/oysterbuild/backend.git"
+
+          #   echo "Step 1: Syncing Code"
+          #   if [ ! -d "$PROJECT_ROOT" ]; then
+          #       echo "Directory $PROJECT_ROOT not found. Cloning repository..."
+          #       git clone -b staging "$REPO_URL" "$PROJECT_ROOT"
+          #   fi
+
+          #   cd "$PROJECT_ROOT"
+          #   echo "Updating code in $(pwd)"
+          #   git remote set-url origin "$REPO_URL"
+          #   git fetch origin staging
+          #   git reset --hard origin/staging
+
+          #   echo "Step 2: Moving to Docker directory"
+          #   # This moves us into /root/app/app
+          #   cd "$DOCKER_DIR"
+          #   echo "Current directory is: $(pwd)"
+
+          #   # Safety check: Verify docker-compose.yml exists here
+          #   if [ ! -f "docker-compose.yml" ]; then
+          #       echo "Error: docker-compose.yml not found in $(pwd)"
+          #       ls -la
+          #       exit 1
+          #   fi
+
+          #   echo "Step 3: Creating .env file"
+          #   cat > .env <<EOF
+          #   ASYNC_DATABASE_URL=${{ secrets.ASYNC_DATABASE_URL }}
+          #   DATABASE_URL=${{ secrets.DATABASE_URL }}
+          #   JWT_SECRET=${{ secrets.JWT_SECRET }}
+          #   JWT_ALGORITHM=${{ secrets.JWT_ALGORITHM }}
+          #   REDIS_URL=${{ secrets.REDIS_URL }}
+          #   CLOUDINARY_CLOUD_NAME=${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          #   CLOUDINARY_API_KEY=${{ secrets.CLOUDINARY_API_KEY }}
+          #   CLOUDINARY_API_SECRET=${{ secrets.CLOUDINARY_API_SECRET }}
+          #   EMAIL_HOST_USER=${{ secrets.EMAIL_HOST_USER }}
+          #   EMAIL_HOST_PASSWORD=${{ secrets.EMAIL_HOST_PASSWORD }}
+          #   PAYSTACK_SECRET_KEY=${{ secrets.PAYSTACK_SECRET_KEY }}
+          #   PAYSTACK_PUBLIC_KEY=${{ secrets.PAYSTACK_PUBLIC_KEY }}
+          #   EOF
+
+          #   echo "Step 3: Deploying with Zero Downtime"
+
+          #   echo "Step 4: Running Docker"
+          #   # Using 'docker compose' (v2)
+ 
+
+          #   # 1. Pull/Build new images while the old ones are still running
+
+          #   docker compose build
+
+          #   # 2. Update the containers. 
+          #   # Docker will only recreate containers that have changes.
+          #   # The '--remove-orphans' cleans up old services not in the compose file.
+            
+          #   docker compose up -d --remove-orphans
+
+          #   # 2. DELETE the stuck schedule files (as root on the host)
+          #   # This is the key fix for the Permission Denied error
+
+          #   rm -f celerybeat-schedule* 
+            
+          #   # 4. Cleanup: Remove old/dangling images to save disk space on VPS
+
+          #   docker image prune -f
+
+
+          #   echo "✅ Deployment successful!"
