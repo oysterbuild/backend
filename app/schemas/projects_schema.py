@@ -27,6 +27,7 @@ class ProjectResponse(BaseModel):
     status: str
     payment_status: str
     owner_id: UUID
+    floor_number: int
     plan_id: Optional[UUID]
     preferred_inspection_days: List[str]
     preferred_inspection_window: str
@@ -62,6 +63,7 @@ class ProjectSetupDto(BaseModel):
     preferred_inspection_window: Optional[InspectionWindowEnum] = Field(
         None, description="Preferred time window for inspections"
     )
+    floor_number: int = Field(..., description="Number of floors in the house")
 
     @model_validator(mode="before")
     def check_dates(cls, values: dict) -> dict:
@@ -116,6 +118,7 @@ class ProjectSetupUpdateDto(BaseModel):
     preferred_inspection_window: Optional[InspectionWindowEnum] = Field(
         None, description="Preferred time window for inspections"
     )
+    floor_number: Optional[int] = Field(None, description="number of floors")
 
     existing_image_ids: Optional[List[UUID]] = []
 

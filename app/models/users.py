@@ -33,6 +33,14 @@ class User(BaseModel):
         ),
     )
 
+    @property
+    def full_name_details(self):
+        return {
+            "first_name": self.first_name,
+            "last_name": self.last_name,
+            "image_url": self.image_url,
+        }
+
 
 class EmailVerificationCodes(BaseModel):
     email = Column(String(500), nullable=False, index=True)
