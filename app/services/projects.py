@@ -248,20 +248,20 @@ class ProjectSetupService:
                 .limit(2)
             )
 
-            #Get the report for the project
+            # Get the report for the project
             project.recents_report = (
                 (await self.db.execute(stmt_recent_report)).scalars().all()
             )
 
-            #Get the plan Objects
+            # Get the plan Objects
             project.plan = await self.db.get(Plan,project.plan_id) if project.plan_id else {}
 
-            #Determine is he can still post report for the project
+            # Determine is he can still post report for the project
             project.has_report_package = (await self.package_useage.has_report_package(
                 project_id
             ))
 
-            #only the owner has this actions
+            # only the owner has this actions
             project.has_report_action = (await self.perms_role.has_project_permission(user_id,project_id,CAN_MANAGE_REPORT))
 
             # Only project owner can see this
@@ -389,6 +389,10 @@ class ProjectSetupService:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND, detail="Report not found"
                 )
+
+            user = await self.db.get(User, report.submitted_by)
+
+            report.submitted_by_details = user.full_name_details
 
             media = await self.media_upload.get_uploaded_report(report_id)
 
@@ -947,5 +951,3 @@ class ProjectSetupService:
             raise Exception(
                 f"Internal server error while fetching single payment record: {str(e)}"
             )
-
-

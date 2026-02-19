@@ -95,6 +95,7 @@ async def create_project(
             "Monday",
             "Wednesday"
         ],
+        "floor_number":1,
         "preferred_inspection_window": "Morning",
     }
     ```
@@ -191,7 +192,8 @@ async def update_project(
         "plan_id": "c56a4180-65aa-42ec-a945-5fd21dec0538",
         "preferred_inspection_days": ["Monday", "Wednesday"],
         "preferred_inspection_window": "Morning",
-        "existing_image_ids": ["uuid1", "uuid2"]
+        "existing_image_ids": ["uuid1", "uuid2"],
+        "floor_number":1
     }
     ```
     """

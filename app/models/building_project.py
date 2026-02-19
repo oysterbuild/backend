@@ -13,6 +13,7 @@ from sqlalchemy import (
     DECIMAL,
     ForeignKey,
     ARRAY,
+    Integer,
 )
 from sqlalchemy.types import Enum  # <-- rename Enum
 from datetime import datetime, date
@@ -40,7 +41,7 @@ class BuildingProject(BaseModel):
     plan_id = Column(
         UUID(as_uuid=True), ForeignKey("plan.id"), nullable=True, index=True
     )  # references Plan
-
+    floor_number = Column(Integer(), default=1)
     preferred_inspection_days = Column(ARRAY(String), nullable=True)
 
     subscription_end_date = Column(Date(), nullable=True)  # references Plan
