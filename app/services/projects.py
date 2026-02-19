@@ -9,7 +9,7 @@ from schemas.projects_schema import ProjectResponse
 from services.plan_usage_service import ProjectPlanUsageService
 from fastapi import HTTPException, status
 from models.core import Role
-from sqlalchemy import select, func, exists, update
+from sqlalchemy import select, func, exists, update, and_
 from constant.roles import PROJECT_OWNER
 from models.project_report import ProjectReport
 from schemas.report_schema import ProjectReportRequest, ProjectReportResponse
@@ -27,7 +27,7 @@ from constant.permissions import (
     CAN_MANAGE_PROJECT_PAYMENT,
     CAN_VIEW_PROJECT_PAYMENT,
 )
-from models.plans import PaymentHistory, Plan
+from models.plans import PaymentHistory, Plan, PlanPackageUsageCount, Package
 from services.payment_services import PaymentService
 from models.payments import Invoice
 from models.media_upload import ProjectUpload, ReportUpload
@@ -817,8 +817,39 @@ class ProjectSetupService:
             result = await self.db.execute(payments_stmt)
             rows = result.all()
 
+            # Get Package and Package Usage For
+
             payments = []
+
+            packages_list = []
+
             for payment, plan in rows:
+                if payment.status == "Active":
+                    usage_stmt = (
+                        select(Package, PlanPackageUsageCount.usage_count)
+                        .outerjoin(
+                            PlanPackageUsageCount,
+                            and_(
+                                PlanPackageUsageCount.package_tag == Package.tag,
+                                PlanPackageUsageCount.payment_history == payment.id,
+                                PlanPackageUsageCount.project_id == project_id,
+                            ),
+                        )
+                        .where(Package.plan_id == plan.id)
+                    )
+                    usage_result = await self.db.execute(usage_stmt)
+                    for pkg, used_count in usage_result.all():
+                        packages_list.append(
+                            {
+                                "name": pkg.name,
+                                "tag": pkg.tag,
+                                "limit": pkg.count,
+                                "is_unlimited": pkg.is_unlimited,
+                                "used": used_count
+                                or 0,  # Default to 0 if record doesn't exist
+                            }
+                        )
+
                 payments.append(
                     {
                         **payment.__dict__,
@@ -828,6 +859,7 @@ class ProjectSetupService:
                             "amount": plan.amount,
                             "currency": plan.currency,
                             "frequency": plan.frequency,
+                            "packages_usage": packages_list,
                         },
                     }
                 )
@@ -902,6 +934,37 @@ class ProjectSetupService:
             logger.info(
                 f"[PAYMENTS] Successfully retrieved payment record: {payment_id}"
             )
+
+            packages_list = []
+            if result_payment.status == "Active":
+                usage_stmt = (
+                    select(Package, PlanPackageUsageCount.usage_count)
+                    .outerjoin(
+                        PlanPackageUsageCount,
+                        and_(
+                            PlanPackageUsageCount.package_tag == Package.tag,
+                            PlanPackageUsageCount.payment_history == result_payment.id,
+                            PlanPackageUsageCount.project_id == project_id,
+                        ),
+                    )
+                    .where(Package.plan_id == plan.id)
+                )
+                usage_result = await self.db.execute(usage_stmt)
+                for pkg, used_count in usage_result.all():
+                    packages_list.append(
+                        {
+                            "name": pkg.name,
+                            "tag": pkg.tag,
+                            "limit": pkg.count,
+                            "is_unlimited": pkg.is_unlimited,
+                            "used": used_count
+                            or 0,  # Default to 0 if record doesn't exist
+                        }
+                    )
+            # Add to package
+            plan.package_usage = packages_list
+
+            # add to full payment
             result_payment.plan = plan
             return result_payment
 
