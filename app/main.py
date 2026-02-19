@@ -105,5 +105,10 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     return JSONResponse(status_code=exc.status_code, content=response_payload)
 
 
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
+
+
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=80, reload=True)
