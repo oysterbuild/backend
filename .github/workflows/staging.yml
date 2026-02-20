@@ -110,15 +110,6 @@ jobs:
             docker rollout app
             echo "✅ App rolled out"
 
-            # # ── 7. Restart celery (no traffic, safe to stop/start) ────────
-            # echo "▶ Restarting celery..."
-            # docker compose up -d --no-deps --build celery
-
-            # # ── 8. Caddy picks up new app container IP automatically ───────
-            # # No restart needed — docker-rollout preserves the container name
-            # # so Caddy's upstream reference (fastapi_app) stays valid
-
-
             # ── 7. Restart celery worker ──────────────────────────────────
             echo "▶ Restarting celery..."
             docker compose up -d --no-deps --build celery
