@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from config import get_settings
+from settings import get_settings
 
 
 def setup_cors(app: FastAPI) -> None:
@@ -15,9 +15,7 @@ def setup_cors(app: FastAPI) -> None:
     # Parse allowed origins from settings
     # In development, this might be a single origin like http://localhost:3000
     # In production, this would be your frontend domain(s)
-    allowed_origins = (
-        settings.cors_origins.split(",") if settings.cors_origins else ["*"]
-    )
+    allowed_origins = ["http://localhost:3000", "https://oysterbuild.pm"]
 
     # Add CORS middleware
     app.add_middleware(
@@ -25,7 +23,10 @@ def setup_cors(app: FastAPI) -> None:
         allow_origins=allowed_origins,
         allow_credentials=True,
         allow_methods=["*"],  # You can restrict to specific HTTP methods if needed
-        allow_headers=["*"],  # You can restrict to specific headers if needed
+        allow_headers=[
+            "Authorization",
+            "Content-Type",
+        ],  # You can restrict to specific headers if needed
         expose_headers=["X-Request-ID"],  # Expose custom headers to the frontend
         max_age=600,  # Cache preflight requests for 10 minutes
     )
