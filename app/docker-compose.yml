@@ -156,8 +156,8 @@ services:
   app:
     build: .
     # Migrations removed from here — now run as a one-shot in CI before rollout
-    command: uvicorn main:app --host 0.0.0.0 --port 8000
-    restart: always
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --workers 2
+    restart: unless-stopped
     expose:
       - "8000"
     env_file:
@@ -169,33 +169,79 @@ services:
       retries: 3
       start_period: 15s  #Bumped to 15s — gives uvicorn enough time to boot
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.5"
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # --- Celery Worker ---
   celery:
     build: .
     command: >
       celery -A worker.celery_worker.celery worker
-      --beat --loglevel=info
+      --beat --loglevel=info --concurrency 2
       -s /tmp/celerybeat-schedule
     env_file:
       - .env
     depends_on:
       - redis
-
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.75"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
   # --- Redis ---
   redis:
     image: redis:7-alpine
     container_name: redis
-    restart: always
+    restart: unless-stopped
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 600M
+        reservations:
+          cpus: "0.05"
+          memory: 64M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
 
   # --- Caddy Reverse Proxy ---
   caddy:
     image: caddy:latest
     container_name: caddy_proxy
-    restart: always
+    restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
@@ -203,8 +249,22 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - caddy_data:/data
       - caddy_config:/config
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+        reservations:
+          cpus: "0.05"
+          memory: 32M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     depends_on:
-      - app
+      app:
+        condition: service_healthy
 
 volumes:
   redis_data:
