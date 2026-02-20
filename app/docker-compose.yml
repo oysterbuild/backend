@@ -2,9 +2,8 @@ services:
   # --- FastAPI App ---
   app:
     build: .
-    # Migrations removed from here — now run as a one-shot in CI before rollout
-    command: uvicorn main:app --host 0.0.0.0 --port 8000
-    restart: always
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --workers 2
+    restart: unless-stopped
     expose:
       - "8000"
     env_file:
@@ -14,9 +13,28 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
-      start_period: 15s  #Bumped to 15s — gives uvicorn enough time to boot
+      start_period: 15s
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
+    networks:
+      - frontend
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.5"
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
 
   # --- Celery Worker ---
   celery:
@@ -24,36 +42,108 @@ services:
     command: >
       celery -A worker.celery_worker.celery worker
       --beat --loglevel=info
-      -s /tmp/celerybeat-schedule
+      --concurrency 2
+      -s /data/celerybeat-schedule
+    restart: unless-stopped
     env_file:
       - .env
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
+    networks:
+      - backend
+    volumes:
+      - celery_data:/data
+    deploy:
+      resources:
+        limits:
+          cpus: "0.75"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
 
   # --- Redis ---
   redis:
     image: redis:7-alpine
     container_name: redis
-    restart: always
+    restart: unless-stopped
+    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru --appendonly yes
+    networks:
+      - backend
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 600M
+        reservations:
+          cpus: "0.05"
+          memory: 64M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+    security_opt:
+      - no-new-privileges:true
 
   # --- Caddy Reverse Proxy ---
   caddy:
     image: caddy:latest
     container_name: caddy_proxy
-    restart: always
+    restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - app
+      app:
+        condition: service_healthy
+    networks:
+      - frontend
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+        reservations:
+          cpus: "0.05"
+          memory: 32M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
+    internal: true   # Redis fully isolated — no internet access
 
 volumes:
   redis_data:
   caddy_data:
   caddy_config:
+  celery_data:     # Persists celery beat schedule across restarts
