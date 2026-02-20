@@ -15,11 +15,7 @@ def setup_cors(app: FastAPI) -> None:
     # Parse allowed origins from settings
     # In development, this might be a single origin like http://localhost:3000
     # In production, this would be your frontend domain(s)
-    allowed_origins = (
-        settings.cors_origins.split(",")
-        if settings.cors_origins
-        else (["*"] if settings.debug == "True" else [])
-    )
+    allowed_origins = ["http://localhost:3000", "https://oysterbuild.pm"]
 
     # Add CORS middleware
     app.add_middleware(

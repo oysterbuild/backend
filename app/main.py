@@ -58,9 +58,7 @@ app = FastAPI(
 )
 
 # Restrict which hosts can hit your API at all
-app.add_middleware(
-    TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts.split(",")
-)
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=["oysterbuild.pm", "localhost"])
 
 app.include_router(api_v1_router)
 
