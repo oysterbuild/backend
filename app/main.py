@@ -121,13 +121,13 @@ def health_check():
     return {"status": "ok"}
 
 
-@app.get("/redis_health")
-async def redis_health_check():
-    try:
-        await redis_client.ping()
-    except Exception:
-        raise HTTPException(status_code=503, detail="Redis unavailable")
-    return {"status": "ok"}
+# @app.get("/redis_health")
+# async def redis_health_check():
+#     try:
+#         await redis_client.ping()
+#     except Exception:
+#         raise HTTPException(status_code=503, detail="Redis unavailable")
+#     return {"status": "ok"}
 
 
 if __name__ == "__main__":
