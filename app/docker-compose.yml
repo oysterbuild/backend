@@ -28,11 +28,11 @@ services:
         reservations:
           cpus: "0.5"
           memory: 256M
-    # logging:
-    #   driver: "json-file"
-    #   options:
-    #     max-size: "10m"
-    #     max-file: "3"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     security_opt:
       - no-new-privileges:true
 
@@ -62,11 +62,11 @@ services:
         reservations:
           cpus: "0.25"
           memory: 128M
-    # logging:
-    #   driver: "json-file"
-    #   options:
-    #     max-size: "10m"
-    #     max-file: "3"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     security_opt:
       - no-new-privileges:true
 
@@ -94,11 +94,11 @@ services:
         reservations:
           cpus: "0.05"
           memory: 64M
-    # logging:
-    #   driver: "json-file"
-    #   options:
-    #     max-size: "5m"
-    #     max-file: "2"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
     security_opt:
       - no-new-privileges:true
 
@@ -127,11 +127,11 @@ services:
         reservations:
           cpus: "0.05"
           memory: 32M
-    # logging:
-    #   driver: "json-file"
-    #   options:
-    #     max-size: "10m"
-    #     max-file: "3"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     security_opt:
       - no-new-privileges:true
 
