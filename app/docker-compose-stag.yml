@@ -1,0 +1,60 @@
+services:
+  # --- FastAPI App ---
+  app:
+    build: .
+    # Migrations removed from here — now run as a one-shot in CI before rollout
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
+    restart: always
+    expose:
+      - "8000"
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s  #Bumped to 15s — gives uvicorn enough time to boot
+    depends_on:
+      - redis
+
+  # --- Celery Worker ---
+  celery:
+    build: .
+    command: >
+      celery -A worker.celery_worker.celery worker
+      --beat --loglevel=info
+      -s /tmp/celerybeat-schedule
+    env_file:
+      - .env
+    depends_on:
+      - redis
+
+  # --- Redis ---
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: always
+    volumes:
+      - redis_data:/data
+
+  # --- Caddy Reverse Proxy ---
+  caddy:
+    image: caddy:latest
+    container_name: caddy_proxy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  redis_data:
+  caddy_data:
+  caddy_config:
+
