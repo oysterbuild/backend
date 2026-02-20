@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     paystack_public_key: str = os.getenv("PAYSTACK_PUBLIC_KEY", " ")
     celery_broker_url: str = os.getenv("REDIS_URL", " ")
     celery_result_backend: str = os.getenv("REDIS_URL", " ")
+    cors_origins: str = os.getenv("ALLOWED_ORIGIN", "http://localhost:8000")
+    debug: str = os.getenv("DEBUG", "True")
+    allowed_hosts: str = os.getenv("ALLOWED_HOST", "localhost")
 
 def get_settings() -> Settings:
     return Settings()
