@@ -31,7 +31,7 @@ services:
         max-file: "3"
 
   # --- Celery Worker (tasks only, no beat) ---
-  celery-worker:
+  celery:
     build: .
     command: >
       celery -A worker.celery_worker.celery worker
