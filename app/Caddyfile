@@ -3,8 +3,8 @@ oysterbuild.pm, www.oysterbuild.pm {
         health_uri      /health
         health_interval 10s
         health_timeout  5s
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
+        header_up X-Real-IP {http.request.header.CF-Connecting-IP}
+        header_up X-Forwarded-For {http.request.header.CF-Connecting-IP}
         header_up X-Forwarded-Proto {scheme}
     }
     log {
