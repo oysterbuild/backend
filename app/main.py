@@ -128,10 +128,18 @@ def health_check():
 
 @app.get("/debug/ip")
 async def get_ip(req: Request):
+    client_ip = (
+        req.headers.get("CF-Connecting-IP")  # real IP from Cloudflare
+        or req.headers.get("X-Real-IP")
+        or req.headers.get("X-Forwarded-For")
+        or req.client.host
+    )
     return {
-        "client_host": req.client.host,
+        "real_ip": client_ip,
+        "cf_connecting_ip": req.headers.get("CF-Connecting-IP"),
         "x_real_ip": req.headers.get("X-Real-IP"),
         "x_forwarded_for": req.headers.get("X-Forwarded-For"),
+        "client_host": req.client.host,
     }
 
 
