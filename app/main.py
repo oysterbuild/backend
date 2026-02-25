@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 import uvicorn
 from utils.loggers import setup_logger
 import logging
@@ -117,8 +117,8 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
 
 @app.get("/health")
-def health_check():
-    return {"status": "ok"}
+def health_check(request: Request):
+    return {"status": "ok", "ip": request.client.host}
 
 
 @app.get("/redis_health")
