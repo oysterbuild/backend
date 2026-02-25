@@ -74,6 +74,32 @@ async def create_project(
     project_service: ProjectSetupService = Depends(get_project_service),
     current_user: dict = Depends(get_current_user),
 ):
+    """
+    Update a project with a JSON payload and multiple images.
+
+    **Required JSON Payload Structure for `project_data` field:**
+    ```json
+    args={
+        "name": "Project A",
+        "description": "Detailed project",
+        "project_type": "Residential",
+        "location_text": "Lagos",
+        "location_map": "https://maps.google.com/...",
+        "start_date": "2026-02-10",
+        "end_date": "2026-02-25",
+        "budget": 3000000,
+        "budget_currency": "USD",
+        "status": "Active",
+        "plan_id": "174b1898-da04-4e06-af3b-9f63380b7e36",
+        "preferred_inspection_days": [
+            "Monday",
+            "Wednesday"
+        ],
+        "floor_number":1,
+        "preferred_inspection_window": "Morning",
+    }
+    ```
+    """
     logger.info(f"User {current_user.get('id')} started creating a project")
 
     try:
@@ -142,28 +168,35 @@ async def update_project(
     project_data: str = Form(
         ...,
         description="JSON payload for project data",
-        json_schema_extra={
-            "name": "Project A",
-            "description": "Detailed project",
-            "project_type": "Residential",
-            "location_text": "Lagos",
-            "location_map": "https://maps.google.com/...",
-            "start_date": "2026-01-25T10:00:00",
-            "end_date": "2026-02-25T10:00:00",
-            "budget": 500000,
-            "budget_currency": "NGN",
-            "status": "Active",
-            "plan_id": "c56a4180-65aa-42ec-a945-5fd21dec0538",
-            "preferred_inspection_days": ["Monday", "Wednesday"],
-            "preferred_inspection_window": "Morning",
-            "existing_image_ids": ["image1_UUID", "image2_UUID"],
-        },
-        # ),
     ),
     images: List[UploadFile] = File([]),
     project_service: ProjectSetupService = Depends(get_project_service),
     current_user: dict = Depends(get_current_user),
 ):
+    """
+    Update a project with a JSON payload and multiple images.
+
+    **Required JSON Payload Structure for `project_data` field:**
+    ```json
+    {
+        "name": "Project A",
+        "description": "Detailed project",
+        "project_type": "Residential",
+        "location_text": "Lagos",
+        "location_map": "https://maps.google.com/...",
+        "start_date": "2026-01-25T10:00:00",
+        "end_date": "2026-02-25T10:00:00",
+        "budget": 500000,
+        "budget_currency": "NGN",
+        "status": "Active",
+        "plan_id": "c56a4180-65aa-42ec-a945-5fd21dec0538",
+        "preferred_inspection_days": ["Monday", "Wednesday"],
+        "preferred_inspection_window": "Morning",
+        "existing_image_ids": ["uuid1", "uuid2"],
+        "floor_number":1
+    }
+    ```
+    """
     try:
         user_id = str(current_user.get("id"))
 
@@ -229,7 +262,7 @@ async def delete_project(
 async def projects(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
-    project_status: str | None = Query(None, description="Filter by project status"),
+    project_status: Optional[Literal["Active","Pending","Draft"]] = Query(None, description="Filter by project status"),
     project_service: "ProjectSetupService" = Depends(get_project_service),
     current_user: dict = Depends(get_current_user),
 ):
@@ -530,15 +563,19 @@ async def generate_presigned_url(
 
 
 # ----------------PROJECT PAYMENT -----------------
-@router.get("/{project_id}/payment/history")
+@router.get(
+    "/{project_id}/payment/history", description="This shows the list of all payments"
+)
 async def get_subscriptions(
     project_id: str,
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
     project_service: ProjectSetupService = Depends(get_project_service),
     current_user: dict = Depends(get_current_user),
 ):
     try:
         user_id = str(current_user.get("id"))
-        response = await project_service.payments_history(project_id, user_id)
+        response = await project_service.payments_history(project_id, user_id,page,limit)
         # Get all subscription payments:
         return response
     except HTTPException as e:

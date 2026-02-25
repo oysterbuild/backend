@@ -1,0 +1,42 @@
+{% extends "base_email.html" %}
+
+{% block content %}
+    <p>Hi {{ user_name }},</p>
+
+    <p>
+        Just a quick reminder that your 
+        <strong>{{ plan_name }}</strong> plan for the project 
+        <strong>{{ project_name }}</strong> 
+        will expire in <strong>{{ days_left }} day{{ "s" if days_left > 1 else "" }}</strong>.
+    </p>
+
+    <div class="receipt-table">
+        <table width="100%">
+            <tr>
+                <td><strong>Plan Name:</strong></td>
+                <td class="text-right">{{ plan_name }}</td>
+            </tr>
+            <tr>
+                <td><strong>Project:</strong></td>
+                <td class="text-right">{{ project_name }}</td>
+            </tr>
+            <tr>
+                <td><strong>Expiration Date:</strong></td>
+                <td class="text-right">{{ expiration_date }}</td>
+            </tr>
+            <tr>
+                <td><strong>Days Remaining:</strong></td>
+                <td class="text-right">{{ days_left }}</td>
+            </tr>
+        </table>
+    </div>
+
+    <p>
+        To avoid interruption of service and maintain access to premium features, 
+        please renew your subscription before it expires.
+    </p>
+
+    <p>If you have any questions, just reply to this email. We're here to help!</p>
+
+    <p>Best,<br>The Oysterbuild Team</p>
+{% endblock %}

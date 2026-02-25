@@ -28,9 +28,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from utils.db_setup import get_database
 from dependencies.auth import get_current_user
 from utils.file_upload import upload_file_optimized
+from utils.loggers import setup_logger
+
 
 router = APIRouter(prefix="/auth")
-
+logger = setup_logger("Auth_route")
 
 # make singleton
 def get_auth_service(db: AsyncSession = Depends(get_database)) -> AuthService:
@@ -41,36 +43,66 @@ def get_auth_service(db: AsyncSession = Depends(get_database)) -> AuthService:
 async def sign_up(
     request_body: SignupRequest, auth_service: AuthService = Depends(get_auth_service)
 ):
-    result = await auth_service.sign_up(user_data=request_body.model_dump())
-    return SuccessResponse(
-        data=UserResponse.model_validate(result).model_dump(),
-        status_code=200,
-        message="user registration successful",
-    )
+    try:
+        result = await auth_service.sign_up(user_data=request_body.model_dump())
+        return SuccessResponse(
+            data=UserResponse.model_validate(result).model_dump(),
+            status_code=200,
+            message="user registration successful",
+        )
+    except HTTPException as e:
+        logger.error(f"HTTP Exception: {e.detail}")
+        raise e
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Something went wrong: {e}",
+        )
 
 
 @router.post("/sign-in", response_model=SuccessResponse)
 async def sign_in(
     request_body: LoginRequest, auth_service: AuthService = Depends(get_auth_service)
 ):
-    result = await auth_service.login(login_data=request_body.model_dump())
-    return SuccessResponse(
-        data=result,
-        status_code=200,
-        message="Login successful",
-    )
+    try:
+        result = await auth_service.login(login_data=request_body.model_dump())
+        return SuccessResponse(
+            data=result,
+            status_code=200,
+            message="Login successful",
+        )
+    except HTTPException as e:
+        logger.error(f"HTTP Exception: {e.detail}")
+        raise e
 
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Something went wrong: {e}",
+        )
 
 @router.post("/email-verification", response_model=SuccessResponse)
 async def email_verification(
     request_body: EmailVerificationRequest,
     auth_service: AuthService = Depends(get_auth_service),
 ):
-    await auth_service.verify_email(verification_data=request_body.model_dump())
-    return SuccessResponse(
-        status_code=200,
-        message="Email Verification successful",
-    )
+    try:
+        await auth_service.verify_email(data=request_body.model_dump())
+        return SuccessResponse(
+            status_code=200,
+            message="Email Verification successful",
+        )
+
+    except HTTPException as e:
+        logger.error(f"HTTP Exception: {e.detail}")
+        raise e
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Something went wrong: {e}",
+        )
 
 
 @router.post("/send-otp")
@@ -79,12 +111,22 @@ async def send_otp_pin(
     background_tasks: BackgroundTasks,
     auth_service: AuthService = Depends(get_auth_service),
 ):
+    try:
     # Use request_data.email and request_data.email_type
-    return await auth_service.process_otp_request(
-        email=request_data.email,
-        email_type=request_data.email_type,
-        background_task=background_tasks,
-    )
+        return await auth_service.process_otp_request(
+            email=request_data.email,
+            email_type=request_data.email_type,
+            background_task=background_tasks,
+        )
+    except HTTPException as e:
+        logger.error(f"HTTP Exception: {e.detail}")
+        raise e
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Something went wrong: {e}",
+        )
 
 
 @router.post("/forget-password", response_model=SuccessResponse)
@@ -92,11 +134,21 @@ async def forget_password(
     request_body: ForgetPasswordRequest,
     auth_service: AuthService = Depends(get_auth_service),
 ):
-    await auth_service.forget_password(request_body.model_dump())
-    return SuccessResponse(
-        status_code=200,
-        message="Password Reset Successful",
-    )
+    try:
+        await auth_service.forget_password(request_body.model_dump())
+        return SuccessResponse(
+            status_code=200,
+            message="Password Reset Successful",
+        )
+    except HTTPException as e:
+        logger.error(f"HTTP Exception: {e.detail}")
+        raise e
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Something went wrong: {e}",
+        )
 
 
 @router.post("/reset-password", response_model=SuccessResponse)
@@ -105,22 +157,41 @@ async def reset_passoword(
     auth_service: AuthService = Depends(get_auth_service),
     current_user: dict = Depends(get_current_user),
 ):
-    user_id = str(current_user.get("id"))
-    response = await auth_service.reset_password(request_body.model_dump(), user_id)
-    return SuccessResponse(
-        status_code=200,
-        data=response,
-        message="Password Reset Successful",
-    )
+    try:
+        user_id = str(current_user.get("id"))
+        response = await auth_service.reset_password(request_body.model_dump(), user_id)
+        return SuccessResponse(
+            status_code=200,
+            data=response,
+            message="Password Reset Successful",
+        )
+    except HTTPException as e:
+        logger.error(f"HTTP Exception: {e.detail}")
+        raise e
 
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Something went wrong: {e}",
+        )
 
 @router.get("/user/me", response_model=SuccessResponse)
 async def get_user_me(current_user: dict = Depends(get_current_user)):
-    return SuccessResponse(
-        status_code=200,
-        data=UserResponse(**current_user),
-        message="User Fetched Successful",
-    )
+    try:
+        return SuccessResponse(
+            status_code=200,
+            data=UserResponse(**current_user),
+            message="User Fetched Successful",
+        )
+    except HTTPException as e:
+        logger.error(f"HTTP Exception: {e.detail}")
+        raise e
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Something went wrong: {e}",
+        )
 
 
 @router.put("/user/me", response_model=SuccessResponse)
@@ -131,22 +202,32 @@ async def user_me(
     auth_service: AuthService = Depends(get_auth_service),
     current_user: dict = Depends(get_current_user),
 ):
-    user_id = str(current_user.get("id"))
+    try:
+        user_id = str(current_user.get("id"))
 
-    profile_pic_url = None
-    if profile_image:
-        profile_pic_url = await upload_file_optimized(
-            profile_image, "profile_images", user_id, current_user, "PROFILE_IMAGES"
+        profile_pic_url = None
+        if profile_image:
+            profile_pic_url = await upload_file_optimized(
+                profile_image, "profile_images", user_id, current_user, "PROFILE_IMAGES"
+            )
+        request_body = {
+            "first_name": first_name,
+            "last_name": last_name,
+            "image_url": profile_pic_url.get("image_url") if  profile_pic_url else None ,
+        }
+
+        response = await auth_service.update_user_profile(request_body, user_id)
+        return SuccessResponse(
+            status_code=200,
+            data=response,
+            message="User Update Successful",
         )
-    request_body = {
-        "first_name": first_name,
-        "last_name": last_name,
-        "image_url": profile_pic_url["image_url"],
-    }
+    except HTTPException as e:
+        logger.error(f"HTTP Exception: {e.detail}")
+        raise e
 
-    response = await auth_service.update_user_profile(request_body, user_id)
-    return SuccessResponse(
-        status_code=200,
-        data=response,
-        message="User Update Successful",
-    )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Something went wrong: {e}",
+        )

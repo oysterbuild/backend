@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 import uvicorn
 from utils.loggers import setup_logger
 import logging
@@ -13,6 +13,9 @@ from services.permission_service import seed_roles_permissions
 from services.plan_service import seed_plans
 from utils.db_setup import get_database
 from fastapi.staticfiles import StaticFiles
+from utils.redis_client import redis_client
+from middlewares.cors import setup_cors
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 
 # from utils import cloudinary
 
@@ -28,7 +31,7 @@ logger = setup_logger(__name__, log_level)
 async def lifespan(app: FastAPI):
     logger.info("Starting Oysterbuild API...")
     try:
-        logger.info("Starting Oysterbuild API Completed...")
+        logger.info("Starting Oysterbuild API...")
 
         # load permission on app start.......
         logger.info("Loading Permission on App starts")
@@ -54,7 +57,15 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+# Restrict which hosts can hit your API at all
+app.add_middleware(
+    TrustedHostMiddleware, allowed_hosts=["oysterbuild.pm", "localhost", "app"]
+)
+
 app.include_router(api_v1_router)
+
+# setup cors
+setup_cors(app)
 
 app.mount("/assets", StaticFiles(directory="assets"), name="assets")
 
@@ -103,6 +114,20 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         response_payload["message"] = detail
 
     return JSONResponse(status_code=exc.status_code, content=response_payload)
+
+
+@app.get("/health")
+def health_check(request: Request):
+    return {"status": "ok", "ip": request.client.host}
+
+
+@app.get("/redis_health")
+async def redis_health_check():
+    try:
+        await redis_client.ping()
+    except Exception:
+        raise HTTPException(status_code=503, detail="Redis unavailable")
+    return {"status": "ok"}
 
 
 if __name__ == "__main__":

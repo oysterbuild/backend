@@ -1,9 +1,9 @@
 import asyncio
 from models.payments import Invoice, Transaction
-from models.plans import PaymentHistory, Plan
+from models.plans import PaymentHistory, Plan,PlanPackageUsageCount
 from models.building_project import BuildingProject
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, exists, update
+from sqlalchemy import select, func, exists, update,delete
 from datetime import datetime, timezone
 from fastapi import HTTPException, BackgroundTasks
 from services.email_service import get_email_service
@@ -51,8 +51,10 @@ async def handle_success_payment(
         1,
     )
 
+    project_id=invoice.project_id
+
     # update the project status and the plan
-    project = await db.get(BuildingProject, invoice.project_id)
+    project = await db.get(BuildingProject, project_id)
 
     if not project:
         raise HTTPException(
@@ -68,6 +70,12 @@ async def handle_success_payment(
         1,
     )
 
+    #clear all usage:
+    delete_stmt = delete(PlanPackageUsageCount).where(
+        PlanPackageUsageCount.project_id == project_id
+    )
+
+    await db.execute(delete_stmt)
     # save all
     await db.commit()
 

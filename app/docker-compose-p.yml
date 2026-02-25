@@ -1,6 +1,8 @@
 services:
+  # --- FastAPI App ---
   app:
     build: .
+    # Migrations removed from here — now run as a one-shot in CI before rollout
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --workers 2
     restart: unless-stopped
     expose:
@@ -9,10 +11,10 @@ services:
       - .env
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
-      interval: 30s       # reduced from 10s — less log noise, still catches failures
+      interval: 10s
       timeout: 5s
       retries: 3
-      start_period: 15s
+      start_period: 15s  #Bumped to 15s — gives uvicorn enough time to boot
     depends_on:
       redis:
         condition: service_healthy
@@ -20,33 +22,28 @@ services:
       resources:
         limits:
           cpus: "1.0"
-          memory: 768M    # bumped — 512M is tight with 2 workers
+          memory: 512M
         reservations:
           cpus: "0.5"
-          memory: 384M
+          memory: 256M
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
 
-  # --- Celery Worker (tasks only, no beat) ---
+  # --- Celery Worker ---
   celery:
     build: .
     command: >
       celery -A worker.celery_worker.celery worker
-      --loglevel=info --concurrency 2
+      --beat --loglevel=info --concurrency 2
+      -s /tmp/celerybeat-schedule
     env_file:
       - .env
     depends_on:
       - redis
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "celery -A worker.celery_worker.celery inspect ping -d celery@$$HOSTNAME --timeout 5 || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
     deploy:
       resources:
         limits:
@@ -60,32 +57,8 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-
-  # --- Celery Beat (scheduler only — separate process) ---
-  celery-beat:
-    build: .
-    command: >
-      celery -A worker.celery_worker.celery beat
-      --loglevel=info -s /tmp/celerybeat-schedule
-    env_file:
-      - .env
-    depends_on:
-      - redis
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: "0.25"
-          memory: 128M
-        reservations:
-          cpus: "0.05"
-          memory: 64M
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "5m"
-        max-file: "2"
-
+        
+  # --- Redis ---
   redis:
     image: redis:7-alpine
     container_name: redis
@@ -113,6 +86,7 @@ services:
         max-size: "5m"
         max-file: "2"
 
+  # --- Caddy Reverse Proxy ---
   caddy:
     image: caddy:latest
     container_name: caddy_proxy
@@ -145,3 +119,4 @@ volumes:
   redis_data:
   caddy_data:
   caddy_config:
+

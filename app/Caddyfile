@@ -1,0 +1,10 @@
+oysterbuild.pm, www.oysterbuild.pm {
+    reverse_proxy app:8000 {
+        health_uri      /health
+        health_interval 10s
+        health_timeout  5s
+    }
+    log {
+        output file /data/access.log
+    }
+}

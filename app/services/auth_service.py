@@ -546,23 +546,12 @@ class AuthService:
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Invalid or expired verification code",
                 )
-
-            # user = await self.db.scalar(select(User).where(User.email == email))
-            # if not user:
-            #     raise HTTPException(
-            #         status_code=status.HTTP_404_NOT_FOUND,
-            #         detail="User not found",
-            #     )
-
-            # user.is_email_verified = True
-            # # await self.db.delete(verification)
-            # await self.db.commit()
-
+                
             logger.info("Email verified successfully | %s", email)
             return "Email verification successful"
 
-        except HTTPException:
-            raise
+        except HTTPException as exce:
+            raise exce
 
         except Exception:
             logger.exception("Unexpected error | email verification | %s", email)

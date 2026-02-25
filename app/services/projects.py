@@ -9,7 +9,7 @@ from schemas.projects_schema import ProjectResponse
 from services.plan_usage_service import ProjectPlanUsageService
 from fastapi import HTTPException, status
 from models.core import Role
-from sqlalchemy import select, func, exists, update
+from sqlalchemy import select, func, exists, update, and_
 from constant.roles import PROJECT_OWNER
 from models.project_report import ProjectReport
 from schemas.report_schema import ProjectReportRequest, ProjectReportResponse
@@ -27,10 +27,13 @@ from constant.permissions import (
     CAN_MANAGE_PROJECT_PAYMENT,
     CAN_VIEW_PROJECT_PAYMENT,
 )
-from models.plans import PaymentHistory, Plan
+from models.plans import PaymentHistory, Plan, PlanPackageUsageCount, Package
 from services.payment_services import PaymentService
 from models.payments import Invoice
 from models.media_upload import ProjectUpload, ReportUpload
+from datetime import datetime,timezone,timedelta
+from models.users import User
+from services.email_service import get_email_service
 
 logger = setup_logger("Project_Service")
 
@@ -203,12 +206,6 @@ class ProjectSetupService:
                 "message": "Projects fetched successfully",
             }
 
-            return {
-                "meta_data": {"limit": limit, "page": page, "total": total},
-                "data": result.scalars().all(),
-                "message": "Projects fetched successfully",
-            }
-
         except Exception as e:
             logger.error(f"[PROJECT_LIST] Error for User {user_id}: {str(e)}")
             raise Exception(f"Failed to fetch projects: {str(e)}")
@@ -250,20 +247,25 @@ class ProjectSetupService:
                 .order_by(ProjectReport.report_date.desc())
                 .limit(2)
             )
+
+            # Get the report for the project
             project.recents_report = (
                 (await self.db.execute(stmt_recent_report)).scalars().all()
             )
 
-            # Package Checks
-            project.has_storage_package = await self.package_useage.has_storage_package(
+            # Get the plan Objects
+            project.plan = await self.db.get(Plan,project.plan_id) if project.plan_id else {}
+
+            # Determine is he can still post report for the project
+            project.has_report_package = (await self.package_useage.has_report_package(
                 project_id
-            )
-            project.has_report_package = await self.package_useage.has_report_package(
-                project_id
-            )
-            project.has_member_invitation_package = (
-                await self.package_useage.has_member_invitation_package(project_id)
-            )
+            ))
+
+            # only the owner has this actions
+            project.has_report_action = (await self.perms_role.has_project_permission(user_id,project_id,CAN_MANAGE_REPORT))
+
+            # Only project owner can see this
+            project.has_payment_action = (True if str(project.owner_id) == user_id else False)
 
             # Media
             project.images = await self.media_upload.get_uploaded_project_media(
@@ -387,6 +389,10 @@ class ProjectSetupService:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND, detail="Report not found"
                 )
+
+            user = await self.db.get(User, report.submitted_by)
+
+            report.submitted_by_details = user.full_name_details
 
             media = await self.media_upload.get_uploaded_report(report_id)
 
@@ -811,8 +817,39 @@ class ProjectSetupService:
             result = await self.db.execute(payments_stmt)
             rows = result.all()
 
+            # Get Package and Package Usage For
+
             payments = []
+
+            packages_list = []
+
             for payment, plan in rows:
+                if payment.status == "Active":
+                    usage_stmt = (
+                        select(Package, PlanPackageUsageCount.usage_count)
+                        .outerjoin(
+                            PlanPackageUsageCount,
+                            and_(
+                                PlanPackageUsageCount.package_tag == Package.tag,
+                                PlanPackageUsageCount.payment_history == payment.id,
+                                PlanPackageUsageCount.project_id == project_id,
+                            ),
+                        )
+                        .where(Package.plan_id == plan.id)
+                    )
+                    usage_result = await self.db.execute(usage_stmt)
+                    for pkg, used_count in usage_result.all():
+                        packages_list.append(
+                            {
+                                "name": pkg.name,
+                                "tag": pkg.tag,
+                                "limit": pkg.count,
+                                "is_unlimited": pkg.is_unlimited,
+                                "used": used_count
+                                or 0,  # Default to 0 if record doesn't exist
+                            }
+                        )
+
                 payments.append(
                     {
                         **payment.__dict__,
@@ -822,6 +859,7 @@ class ProjectSetupService:
                             "amount": plan.amount,
                             "currency": plan.currency,
                             "frequency": plan.frequency,
+                            "packages_usage": packages_list,
                         },
                     }
                 )
@@ -896,6 +934,37 @@ class ProjectSetupService:
             logger.info(
                 f"[PAYMENTS] Successfully retrieved payment record: {payment_id}"
             )
+
+            packages_list = []
+            if result_payment.status == "Active":
+                usage_stmt = (
+                    select(Package, PlanPackageUsageCount.usage_count)
+                    .outerjoin(
+                        PlanPackageUsageCount,
+                        and_(
+                            PlanPackageUsageCount.package_tag == Package.tag,
+                            PlanPackageUsageCount.payment_history == result_payment.id,
+                            PlanPackageUsageCount.project_id == project_id,
+                        ),
+                    )
+                    .where(Package.plan_id == plan.id)
+                )
+                usage_result = await self.db.execute(usage_stmt)
+                for pkg, used_count in usage_result.all():
+                    packages_list.append(
+                        {
+                            "name": pkg.name,
+                            "tag": pkg.tag,
+                            "limit": pkg.count,
+                            "is_unlimited": pkg.is_unlimited,
+                            "used": used_count
+                            or 0,  # Default to 0 if record doesn't exist
+                        }
+                    )
+            # Add to package
+            plan.package_usage = packages_list
+
+            # add to full payment
             result_payment.plan = plan
             return result_payment
 
@@ -922,6 +991,13 @@ class ProjectSetupService:
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="Project Id Doesnt Exist",
                 )
+
+            if str(user_id) != str(project.owner_id):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=self.permission,
+                )
+
             # Generate Invoice,Tag the project has pending
             invoice_id = await self.payment_service.generate_payment_invoice(
                 project_id, plan_id, project

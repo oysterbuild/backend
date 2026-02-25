@@ -25,6 +25,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Run basic app smoke test
+        working-directory: app
+        run: |
+          python - <<EOF
+          print("Running smoke test...")
+          import sys
+          print("Python OK:", sys.version)
+          import main
+          print("App import successful ✅")
+          EOF
+
   deploy:
     name: Deploy to Hostinger VPS
     needs: test
@@ -35,23 +46,49 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.HOSTINGER_HOST }}
-          username: ${{ secrets.HOSTINGER_USER }}
+          username: root
           key: ${{ secrets.HOSTINGER_SSH_KEY }}
-          port: ${{ secrets.HOSTINGER_PORT || 22 }}
+          port: 22
+          debug: true
           script: |
             set -e
 
-            cd /home/${{ secrets.HOSTINGER_USER }}/app
+            # ── 1. Install docker-rollout if missing ──────────────────────
+            mkdir -p ~/.docker/cli-plugins
+            if [ ! -f ~/.docker/cli-plugins/docker-rollout ]; then
+              curl -fsSL https://raw.githubusercontent.com/wowu/docker-rollout/main/docker-rollout \
+                -o ~/.docker/cli-plugins/docker-rollout
+              chmod +x ~/.docker/cli-plugins/docker-rollout
+            fi
 
-            echo "Pulling latest code"
-            git pull origin main
+            # ── 2. Sync code ──────────────────────────────────────────────
+            PROJECT_ROOT="/root/app"
+            DOCKER_DIR="app"
+            REPO_URL="https://${{ secrets.GH_PAT }}@github.com/oysterbuild/backend.git"
 
-            echo "Creating .env file"
+            echo "Step 1: Syncing Code"
+            if [ ! -d "$PROJECT_ROOT" ]; then
+                echo "Directory $PROJECT_ROOT not found. Cloning repository..."
+                git clone -b main "$REPO_URL" "$PROJECT_ROOT"
+            fi
+
+            cd "$PROJECT_ROOT"
+            echo "Updating code in $(pwd)"
+            git remote set-url origin "$REPO_URL"
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "Step 2: Moving to Docker directory"
+            # This moves us into /root/app/app
+
+            cd "$DOCKER_DIR"
+            echo "Current directory is: $(pwd)"
+
+            echo "Step 3: Creating .env file"
             cat > .env <<EOF
-            SECRET_KEY=${{ secrets.SECRET_KEY }}
-            ASYNC_DATABASE_URL=${{ secrets.ASYNC_DATABASE_URL }}
-            DATABASE_URL=${{ secrets.DATABASE_URL }}
-            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            ASYNC_DATABASE_URL=${{ secrets.PROD_ASYNC_DATABASE_URL }}
+            DATABASE_URL=${{ secrets.PROD_DATABASE_URL }}
+            JWT_SECRET=${{ secrets.PROD_JWT_SECRET }}
             JWT_ALGORITHM=${{ secrets.JWT_ALGORITHM }}
             REDIS_URL=${{ secrets.REDIS_URL }}
             CLOUDINARY_CLOUD_NAME=${{ secrets.CLOUDINARY_CLOUD_NAME }}
@@ -59,15 +96,40 @@ jobs:
             CLOUDINARY_API_SECRET=${{ secrets.CLOUDINARY_API_SECRET }}
             EMAIL_HOST_USER=${{ secrets.EMAIL_HOST_USER }}
             EMAIL_HOST_PASSWORD=${{ secrets.EMAIL_HOST_PASSWORD }}
-            PAYSTACK_SECRET_KEYL=${{ secrets.PAYSTACK_SECRET_KEY }}
-            PAYSTACK_PUBLIC_KEY=${{ secrets.PAYSTACK_PUBLIC_KEY }}
+            PAYSTACK_SECRET_KEY=${{ secrets.PROD_PAYSTACK_SECRET_KEY }}
+            PAYSTACK_PUBLIC_KEY=${{ secrets.PROD_PAYSTACK_PUBLIC_KEY }}
             EOF
 
-            echo "Stopping containers"
-            docker compose down || true
+            # ── 4. Build new image (old container still serving) ──────────
+            echo "▶ Building..."
+            docker compose build app
 
-            echo "Building containers"
-            docker compose build --no-cache
+            # ── 5. Run migrations (one-shot, before cutover) ──────────────
+            echo "▶ Running migrations..."
+            docker compose run --rm app alembic upgrade head
+            echo "✅ Migrations done"
 
-            echo "Starting containers"
-            docker compose up -d
+            # ── 6. Zero-downtime rollout ───────────────────────────────────
+            echo "▶ Rolling out app..."
+            docker rollout app
+            echo "✅ App rolled out"
+
+            # ── 7. Restart celery worker ──────────────────────────────────
+            echo "▶ Restarting celery..."
+            docker compose up -d --no-deps --build celery
+            echo "✅ Celery worker restarted"
+
+            # ── 8. Restart celery beat ────────────────────────────────────
+            echo "▶ Restarting celery-beat..."
+            docker compose up -d --no-deps --build celery-beat
+            echo "✅ Celery beat restarted"
+
+            # ── 9. Cleanup ─────────────────────────────────────────────────
+            docker image prune -f
+            echo "✅ Deployment complete!"
+
+
+
+
+  
+

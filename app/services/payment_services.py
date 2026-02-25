@@ -12,9 +12,9 @@ from settings import get_settings
 from settings import Settings
 from typing import Any, Dict, Optional
 import httpx
-from models.plans import PaymentHistory
+from models.plans import PaymentHistory,PlanPackageUsageCount
 from dateutil.relativedelta import relativedelta
-from sqlalchemy import select, func, exists, update
+from sqlalchemy import select, func, exists, update,delete
 from helpers.payments import handle_success_payment, handle_failed_payment
 from services.email_service import get_email_service
 from helpers.constant import get_next_cycle_date
@@ -469,93 +469,7 @@ class PaymentService:
 
         return f"INV-{hash_val}"
 
-    # async def generate_payment_invoice(
-    #     self, project_id: str, plan_id: str, project: BuildingProject
-    # ):
-    #     # invoice number
-    #     plan = await self.db.get(Plan, plan_id)
-    #     if not plan:
-    #         raise HTTPException(
-    #             status_code=status.HTTP_404_NOT_FOUND, detail="plan not found"
-    #         )
-    #     invoice = None
-
-    #     if plan.plan_status != "Free":
-    #         invoice_number = await self.generate_invoice_number(project_id)
-    #         invoice = Invoice(
-    #             project_id=project_id,
-    #             plan_id=plan_id,
-    #             invoice_id=invoice_number,
-    #             currency=plan.currency,
-    #             amount=plan.amount,
-    #             issued_at=datetime.now(tz=timezone.utc),
-    #             due_date=datetime.now(tz=timezone.utc).date(),
-    #         )
-    #         self.db.add(invoice)
-    #         await self.db.flush()
-    #         await self.db.refresh(invoice)
-
-    #     else:
-    #         project.subscription_end_date = (
-    #             get_next_cycle_date(
-    #                 datetime.now(tz=timezone.utc).date(),
-    #                 plan.frequency,
-    #                 1,
-    #             ),
-    #         )
-
-    #         project.payment_status = "Active"
-    #         project.plan_id = plan_id
-
-    #     # Before creating new payment_history check if has any pending is
-    #     # if he has then update it instead of creating new one
-
-    #     history_stmt = (
-    #         select(PaymentHistory)
-    #         .where(
-    #             PaymentHistory.project_id == project_id,
-    #             PaymentHistory.status == "Pending",
-    #         )
-    #         .with_for_update()
-    #     )
-
-    #     pending_history = (await self.db.execute(history_stmt)).scalar_one_or_none()
-
-    #     if not pending_history:
-    #         payment_history = PaymentHistory(
-    #             project_id=project_id,
-    #             plan_id=plan_id,
-    #             invoice_id=invoice.invoice_id if invoice else None,
-    #             currency=plan.currency,
-    #             amount=plan.amount,
-    #             months=1,  # default to montly,
-    #             status="Pending",
-    #             start_date=datetime.now(tz=timezone.utc).date(),
-    #             next_billing_date=get_next_cycle_date(
-    #                 datetime.now(tz=timezone.utc).date(),  # <- pass actual date
-    #                 plan.frequency,
-    #                 1,
-    #             ),
-    #         )
-
-    #         self.db.add(payment_history)
-    #     else:
-    #         pending_history.invoice_id = invoice.invoice_id if invoice else None
-    #         pending_history.plan_id = plan_id
-    #         pending_history.start_date = datetime.now(tz=timezone.utc).date()
-    #         pending_history.next_billing_date = (
-    #             get_next_cycle_date(
-    #                 datetime.now(tz=timezone.utc).date(),
-    #                 plan.frequency,
-    #                 1,
-    #             ),
-    #         )
-
-    #     # PAYMENT HISTORY
-    #     await self.db.commit()
-    #     await self.db.refresh(payment_history)
-    #     return payment_history
-
+ 
     async def generate_payment_invoice(
         self, project_id: str, plan_id: str, project: BuildingProject
     ):
@@ -601,6 +515,13 @@ class PaymentService:
             )
             project.payment_status = "Active"
             project.plan_id = plan_id
+
+            #clear all usage:
+            delete_stmt = delete(PlanPackageUsageCount).where(
+                PlanPackageUsageCount.project_id == project_id
+            )
+
+            await self.db.execute(delete_stmt)
 
         # -------------------------
         # Payment history handling

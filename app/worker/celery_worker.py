@@ -2,6 +2,7 @@ import logging
 from celery import Celery
 from celery.schedules import crontab
 from settings import get_settings
+import asyncio
 
 logger = logging.getLogger("celery_worker")
 
@@ -26,42 +27,71 @@ celery.conf.update(
     broker_connection_retry_on_startup=True,
     timezone="UTC",
 )
-
 # Beat schedule (cron jobs)
 celery.conf.beat_schedule = {
+    # Runs exactly at 01:00 (1 AM) every day
     "expire-plans-every-hour": {
         "task": "schedule_plan_expiration",
-        "schedule": crontab(minute=0, hour="*"),  # every hour
+        "schedule": crontab(hour=1, minute=0), 
     },
+
+    # Runs exactly at 01:30 (1 AM) every day
     "send-expiration-notifications": {
-        "task": "schedule_plan_expire_notification",
-        "schedule": crontab(minute="*/15"),  # every 15 minutes
+        "task": "schedule_plan_expire_notification_email",
+        "schedule": crontab(hour=1, minute=30),  
     },
 }
 
 
-# ---------------------------
-# Celery Tasks
-# ---------------------------
-
-
+# # ---------------------------
+# # Celery Tasks
+# # ---------------------------
 @celery.task(name="schedule_plan_expiration")
 def schedule_plan_expiration():
-    """
-    Task to expire user plans.
-    Runs every hour.
-    """
+
+    import os
+    import sys
+
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+    from services.plan_usage_service import ProjectPlanUsageService
+    # Import engine here or from your DB module
+    from utils.db_setup import AsyncSessionLocal, engine
+
+    async def run():
+        try:
+            async with AsyncSessionLocal() as db:
+                service = ProjectPlanUsageService(db=db)
+                await service.schedule_plan_expiration()
+        finally:
+            # THIS IS THE FIX: Clear the pool before the loop exits
+            await engine.dispose()
+
     logger.info("Running plan expiration task")
-    # TODO: implement expiration logic
+    asyncio.run(run())
     return "Plan expiration task completed"
 
 
-@celery.task(name="schedule_plan_expire_notification")
-def schedule_plan_expire_notification():
-    """
-    Task to send plan expiration notifications.
-    Runs every 15 minutes.
-    """
-    logger.info("Running plan expiration notification task")
-    # TODO: implement notification logic
-    return "Plan expiration notification task completed"
+@celery.task(name="schedule_plan_expire_notification_email")
+def schedule_plan_expiration_email():
+
+    import os
+    import sys
+
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+    from services.plan_usage_service import ProjectPlanUsageService
+    from utils.db_setup import AsyncSessionLocal, engine
+
+    async def run():
+        try:
+            async with AsyncSessionLocal() as db:
+                service = ProjectPlanUsageService(db=db)
+                await service.send_plan_expiration_reminders()
+        finally:
+            # THIS IS THE FIX: Clear the pool before the loop exits
+            await engine.dispose()
+
+    logger.info("Running plan expiration email task")
+    asyncio.run(run())
+    return "Plan expiration email task completed"

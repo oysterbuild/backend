@@ -2,7 +2,7 @@ from models.plans import Plan, Package
 from constant.plans import plans
 from sqlalchemy.ext.asyncio import AsyncSession
 from utils.db_setup import get_database
-from fastapi import Depends
+from fastapi import Depends,HTTPException,status
 from sqlalchemy import select
 from constant.roles_permissions import default_role_permissions
 from fastapi import Depends
@@ -68,6 +68,39 @@ class PlansService:
 
         await self.db.commit()
         logger.info("✅ All plans & packages seeded successfully")
+
+
+    async def get_plans(self):
+        try:
+            stmt = select(Plan, Package).join(
+                Package, Plan.id == Package.plan_id
+            )
+
+            result = await self.db.execute(stmt)
+            rows = result.all()
+
+            plans_map = {}
+
+            for plan, package in rows:
+                if plan.id not in plans_map:
+                    plans_map[plan.id] = {
+                        "plan": plan,
+                        "packages": []
+                    }
+
+                plans_map[plan.id]["packages"].append(package)
+
+            return list(plans_map.values())
+
+        except HTTPException as e:
+            logger.error(f"HTTP Exception: {e.detail}")
+            raise e
+
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Something went wrong: {e}",
+            )
 
 
 # -----------------------------

@@ -3,6 +3,7 @@ from typing import Optional, Literal, List, Any
 from uuid import UUID
 from datetime import datetime, timezone, date
 from .enums import ProjectType, WeekdayEnum, InspectionWindowEnum
+from fastapi import Form, File, UploadFile, Depends
 
 
 class SuccessResponse(BaseModel):
@@ -26,6 +27,7 @@ class ProjectResponse(BaseModel):
     status: str
     payment_status: str
     owner_id: UUID
+    floor_number: int
     plan_id: Optional[UUID]
     preferred_inspection_days: List[str]
     preferred_inspection_window: str
@@ -61,6 +63,7 @@ class ProjectSetupDto(BaseModel):
     preferred_inspection_window: Optional[InspectionWindowEnum] = Field(
         None, description="Preferred time window for inspections"
     )
+    floor_number: int = Field(..., description="Number of floors in the house")
 
     @model_validator(mode="before")
     def check_dates(cls, values: dict) -> dict:
@@ -103,7 +106,7 @@ class ProjectSetupUpdateDto(BaseModel):
         None, description="Currency of the budget"
     )
 
-    status: Optional[Literal["Active", "Completed", "Pending", "Draft"]] = Field(
+    status: Optional[Literal["Active", "Pending", "Draft"]] = Field(
         None, description="Current status of the project"
     )
 
@@ -115,6 +118,7 @@ class ProjectSetupUpdateDto(BaseModel):
     preferred_inspection_window: Optional[InspectionWindowEnum] = Field(
         None, description="Preferred time window for inspections"
     )
+    floor_number: Optional[int] = Field(None, description="number of floors")
 
     existing_image_ids: Optional[List[UUID]] = []
 
@@ -128,3 +132,36 @@ class ProjectSetupUpdateDto(BaseModel):
             raise ValueError("end_date must be after start_date")
 
         return values
+
+class UpdateProjectForm:
+    def __init__(
+        self,
+        name: Optional[str] = Form(None),
+        description: Optional[str] = Form(None),
+        project_type: Optional[ProjectType] = Form(None),
+        location_text: Optional[str] = Form(None),
+        location_map: Optional[str] = Form(None),
+        start_date: Optional[date] = Form(None, description="Format: YYYY-MM-DD"),
+        end_date: Optional[date] = Form(None, description="Format: YYYY-MM-DD"),
+        budget: Optional[float] = Form(None),
+        budget_currency: Optional[Literal["NGN", "USD"]] = Form(None),
+        status: Optional[Literal["Active","Pending", "Draft"]] = Form(None),
+        plan_id: Optional[UUID] = Form(None),
+        preferred_inspection_days: Optional[List[WeekdayEnum]] = Form(None),
+        preferred_inspection_window: Optional[InspectionWindowEnum] = Form(None),
+        existing_image_ids: Optional[List[UUID]] = Form(None),
+    ):
+        self.name = name
+        self.description = description
+        self.project_type = project_type
+        self.location_text = location_text
+        self.location_map = location_map
+        self.start_date = start_date
+        self.end_date = end_date
+        self.budget = budget
+        self.budget_currency = budget_currency
+        self.status = status
+        self.plan_id = plan_id
+        self.preferred_inspection_days = preferred_inspection_days
+        self.preferred_inspection_window = preferred_inspection_window
+        self.existing_image_ids = existing_image_ids
