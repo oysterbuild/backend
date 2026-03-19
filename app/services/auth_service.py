@@ -387,18 +387,18 @@ class AuthService:
                     )
 
                 # Check phone
-                exists_phone = await self.db.execute(
-                    select(User).where(User.phone_number == user_data["phone_number"])
-                )
-                if exists_phone.scalar_one_or_none():
-                    logger.warning(
-                        "Signup failed | phone exists | %s",
-                        user_data["phone_number"],
-                    )
-                    raise HTTPException(
-                        status_code=status.HTTP_409_CONFLICT,
-                        detail="Phone number already registered",
-                    )
+                # exists_phone = await self.db.execute(
+                #     select(User).where(User.phone_number == user_data["phone_number"])
+                # )
+                # if exists_phone.scalar_one_or_none():
+                #     logger.warning(
+                #         "Signup failed | phone exists | %s",
+                #         user_data["phone_number"],
+                #     )
+                #     raise HTTPException(
+                #         status_code=status.HTTP_409_CONFLICT,
+                #         detail="Phone number already registered",
+                #     )
 
                 user_data.update(
                     {
@@ -546,7 +546,7 @@ class AuthService:
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Invalid or expired verification code",
                 )
-                
+
             logger.info("Email verified successfully | %s", email)
             return "Email verification successful"
 
