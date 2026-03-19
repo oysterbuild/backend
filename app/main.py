@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from utils.redis_client import redis_client
 from middlewares.cors import setup_cors
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 # from utils import cloudinary
 
@@ -61,6 +62,10 @@ app = FastAPI(
 app.add_middleware(
     TrustedHostMiddleware, allowed_hosts=["oysterbuild.pm", "localhost", "app"]
 )
+
+# Trust the proxy — only trust your Caddy container IP
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+
 
 app.include_router(api_v1_router)
 
@@ -117,8 +122,25 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
 
 @app.get("/health")
-def health_check(request: Request):
-    return {"status": "ok", "ip": request.client.host}
+def health_check():
+    return {"status": "ok"}
+
+
+@app.get("/debug/ip")
+async def get_ip(req: Request):
+    client_ip = (
+        req.headers.get("CF-Connecting-IP")  # real IP from Cloudflare
+        or req.headers.get("X-Real-IP")
+        or req.headers.get("X-Forwarded-For")
+        or req.client.host
+    )
+    return {
+        "real_ip": client_ip,
+        "cf_connecting_ip": req.headers.get("CF-Connecting-IP"),
+        "x_real_ip": req.headers.get("X-Real-IP"),
+        "x_forwarded_for": req.headers.get("X-Forwarded-For"),
+        "client_host": req.client.host,
+    }
 
 
 @app.get("/redis_health")

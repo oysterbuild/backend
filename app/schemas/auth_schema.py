@@ -21,7 +21,7 @@ class SignupRequest(BaseModel):
     first_name: str = Field(..., min_length=1, max_length=225)
     last_name: str = Field(..., min_length=1, max_length=225)
     email: EmailStr
-    phone_number: str = Field(..., min_length=7, max_length=15)
+    phone_number: Optional[str] = Field(None, min_length=7, max_length=15)
     password: str = Field(..., min_length=8)
 
     class Config:
