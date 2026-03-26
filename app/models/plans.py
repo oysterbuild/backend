@@ -96,7 +96,7 @@ class PaymentHistory(BaseModel):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('Active', 'Pending','Expired')",
+            "status IN ('Active', 'Pending','Expired','Overdue','Paid')",
             name="check_status",
         ),
         CheckConstraint("currency IN ('NGN', 'USD')", name="check_currency"),

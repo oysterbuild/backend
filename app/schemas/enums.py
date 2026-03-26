@@ -18,6 +18,16 @@ class PaymentStatus(enum.Enum):
     PENDING = "Pending"
     PAID = "Paid"
     APPROVED = "Approved"
+    EXPIRED = "Expired"
+    OVERDUE = "Overdue"
+    AWAITING_PAYMENT = "Awaiting_Payment"
+
+
+class ProjectStatus(enum.Enum):
+    PENDING = "Pending"
+    ACTIVE = "Active"
+    COMPLETED = "Completed"
+    CANCELLED = "Cancelled"
 
 
 class MilestoneStatus(enum.Enum):
