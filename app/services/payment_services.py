@@ -12,9 +12,9 @@ from settings import get_settings
 from settings import Settings
 from typing import Any, Dict, Optional
 import httpx
-from models.plans import PaymentHistory,PlanPackageUsageCount
+from models.plans import PaymentHistory, PlanPackageUsageCount
 from dateutil.relativedelta import relativedelta
-from sqlalchemy import select, func, exists, update,delete
+from sqlalchemy import select, func, exists, update, delete
 from helpers.payments import handle_success_payment, handle_failed_payment
 from services.email_service import get_email_service
 from helpers.constant import get_next_cycle_date
@@ -469,7 +469,6 @@ class PaymentService:
 
         return f"INV-{hash_val}"
 
- 
     async def generate_payment_invoice(
         self, project_id: str, plan_id: str, project: BuildingProject
     ):
@@ -513,10 +512,10 @@ class PaymentService:
                 plan.frequency,
                 1,
             )
-            project.payment_status = "Active"
+            project.payment_status = "Paid"
             project.plan_id = plan_id
 
-            #clear all usage:
+            # clear all usage:
             delete_stmt = delete(PlanPackageUsageCount).where(
                 PlanPackageUsageCount.project_id == project_id
             )
@@ -551,7 +550,7 @@ class PaymentService:
                 currency=plan.currency,
                 amount=plan.amount,
                 months=1,
-                status="Active" if plan.plan_status == "Free" else "Pending",
+                status="Paid" if plan.plan_status == "Free" else "Pending",
                 start_date=today,
                 next_billing_date=next_billing_date,
             )
@@ -565,7 +564,7 @@ class PaymentService:
 
             # If free plan, mark as success
             if plan.plan_status == "Free":
-                pending_history.status = "Active"
+                pending_history.status = "Paid"
 
             payment_history = pending_history
 
