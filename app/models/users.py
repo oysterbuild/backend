@@ -28,7 +28,7 @@ class User(BaseModel):
 
     __table_args__ = (
         CheckConstraint(
-            "role IN ('SUPER_ADMIN', 'USER')",
+            "role IN ('SUPER_ADMIN', 'USER','INSPECTOR')",
             name="check_user_role_valid",
         ),
     )

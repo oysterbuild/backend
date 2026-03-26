@@ -1,9 +1,9 @@
 import asyncio
 from models.payments import Invoice, Transaction
-from models.plans import PaymentHistory, Plan,PlanPackageUsageCount
+from models.plans import PaymentHistory, Plan, PlanPackageUsageCount
 from models.building_project import BuildingProject
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, exists, update,delete
+from sqlalchemy import select, func, exists, update, delete
 from datetime import datetime, timezone
 from fastapi import HTTPException, BackgroundTasks
 from services.email_service import get_email_service
@@ -43,7 +43,7 @@ async def handle_success_payment(
         )
     )
 
-    tranx_history.status = "Active"
+    tranx_history.status = "Paid"
     tranx_history.start_date = datetime.now(tz=timezone.utc).date()
     tranx_history.next_billing_date = get_next_cycle_date(
         datetime.now(tz=timezone.utc).date(),  # <- pass actual date
@@ -51,7 +51,7 @@ async def handle_success_payment(
         1,
     )
 
-    project_id=invoice.project_id
+    project_id = invoice.project_id
 
     # update the project status and the plan
     project = await db.get(BuildingProject, project_id)
@@ -63,14 +63,14 @@ async def handle_success_payment(
         )
 
     project.plan_id = invoice.plan_id
-    project.payment_status = "Active"
+    project.payment_status = "Paid"
     project.subscription_end_date = get_next_cycle_date(
         datetime.now(tz=timezone.utc).date(),  # <- pass actual date
         plan.frequency,
         1,
     )
 
-    #clear all usage:
+    # clear all usage:
     delete_stmt = delete(PlanPackageUsageCount).where(
         PlanPackageUsageCount.project_id == project_id
     )

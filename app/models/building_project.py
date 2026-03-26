@@ -34,7 +34,7 @@ class BuildingProject(BaseModel):
     budget = Column(DECIMAL(20, 2), nullable=False, default=0.00)
     budget_currency = Column(String(3), nullable=False, default="NGN")  # NGN or USD
     status = Column(String(50), default="Draft")  # Active, Completed, On Hold
-    payment_status = Column(String(50), default="Pending")
+    payment_status = Column(String(50), default="Awaiting_Payment")
     owner_id = Column(
         UUID(as_uuid=True), ForeignKey("user.id"), nullable=False, index=True
     )  # owner references User
@@ -50,10 +50,11 @@ class BuildingProject(BaseModel):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('Active', 'Pending','Draft','Completed')", name="check_status"
+            "status IN ('Active', 'Pending','Draft','Completed','Cancelled')",
+            name="check_status",
         ),
         CheckConstraint(
-            "payment_status IN ('Active', 'Pending','Expired')",
+            "payment_status IN ('Active', 'Pending','Expired','Awaiting_Payment','Paid')",
             name="check_payment_status",
         ),
         CheckConstraint(
