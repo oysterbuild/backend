@@ -57,12 +57,25 @@ async def get_all_project(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user.get("id"))
-    return await project_service.get_all_project(
-        user_id=user_id,
-        page=page,
-        limit=limit,
-        project_status=project_status,
+    logger.info(
+        f"admin get_all_project user_id={user_id} page={page} limit={limit} project_status={project_status}"
     )
+    try:
+        return await project_service.get_all_project(
+            user_id=user_id,
+            page=page,
+            limit=limit,
+            project_status=project_status,
+        )
+    except HTTPException as e:
+        logger.error(f"admin get_all_project HTTP error: {e.detail}")
+        raise e
+    except Exception as e:
+        logger.exception(f"admin get_all_project failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Something went wrong: {e}",
+        )
 
 
 @router.get("/project/{project_id}/analytics")
@@ -83,11 +96,21 @@ async def get_all_project_analytics(
     current_user: dict = Depends(get_current_user),
     project_service: ProjectSetupService = Depends(get_project_service),
 ):
-
     user_id = str(current_user.get("id"))
-    return await project_service.get_all_project_analytics(
-        user_id=user_id,
-    )
+    logger.info(f"admin get_all_project_analytics user_id={user_id}")
+    try:
+        return await project_service.get_all_project_analytics(
+            user_id=user_id,
+        )
+    except HTTPException as e:
+        logger.error(f"admin get_all_project_analytics HTTP error: {e.detail}")
+        raise e
+    except Exception as e:
+        logger.exception(f"admin get_all_project_analytics failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Something went wrong: {e}",
+        )
 
 
 @router.put("/project/{project_id}/update-status")
@@ -99,8 +122,20 @@ async def update_project_status(
     current_user: dict = Depends(get_current_user),
     project_service: ProjectSetupService = Depends(get_project_service),
 ):
-
     user_id = str(current_user.get("id"))
-    return await project_service.update_project_status(
-        user_id=user_id, project_id=project_id, project_status=project_status
+    logger.info(
+        f"admin update_project_status user_id={user_id} project_id={project_id} new_status={project_status}"
     )
+    try:
+        return await project_service.update_project_status(
+            user_id=user_id, project_id=project_id, project_status=project_status
+        )
+    except HTTPException as e:
+        logger.error(f"admin update_project_status HTTP error: {e.detail}")
+        raise e
+    except Exception as e:
+        logger.exception(f"admin update_project_status failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Something went wrong: {e}",
+        )
