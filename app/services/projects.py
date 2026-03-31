@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models.building_project import BuildingProject
 from models.project_members import ProjectMember
 from utils.loggers import setup_logger
-from services.upload_service import UploadMedia
+from services.upload_service import MediaUploadService
 from schemas.projects_schema import ProjectResponse
 from services.plan_usage_service import ProjectPlanUsageService
 from fastapi import HTTPException, status
@@ -42,7 +42,7 @@ logger = setup_logger("Project_Service")
 class ProjectSetupService:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
-        self.media_upload = UploadMedia(db=db)
+        self.media_upload = MediaUploadService(db=db)
         self.package_useage = ProjectPlanUsageService(db=db)
         self.organization_admin = PROJECT_OWNER
         self.permission = "Insufficient permission to complete the action"
