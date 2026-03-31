@@ -1,36 +1,17 @@
-import asyncio
-import json
-from fastapi import (
-    APIRouter,
-    Depends,
-    BackgroundTasks,
-    status,
-    UploadFile,
-    Form,
-    File,
-    HTTPException,
-    Query,
-)
-from schemas.auth_schema import AllInspectorsSchema
-from httpx import _status_codes
-from schemas.inspectors_schema import InspectorCreationSetupDTO
+from typing import Literal, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from dependencies.auth import get_current_user
 from services.projects import ProjectSetupService
 from utils.db_setup import get_database
-from sqlalchemy.ext.asyncio import AsyncSession
-from dependencies.auth import get_current_user
-from utils.file_upload import upload_file_optimized
-from typing import List, Optional, Literal
-from datetime import datetime, timezone
-from uuid import UUID
 from utils.loggers import setup_logger
-from services.inspector import InspectorService
-
 
 router = APIRouter(prefix="/admin")
 logger = setup_logger("admin")
 
 
-# project service
 def get_project_service(
     db: AsyncSession = Depends(get_database),
 ) -> ProjectSetupService:
@@ -84,11 +65,23 @@ async def get_project_analytics(
     current_user: dict = Depends(get_current_user),
     project_service: ProjectSetupService = Depends(get_project_service),
 ):
-
     user_id = str(current_user.get("id"))
-    return await project_service.get_project_analytics(
-        user_id=user_id, project_id=project_id
+    logger.info(
+        f"admin get_project_analytics user_id={user_id} project_id={project_id}"
     )
+    try:
+        return await project_service.get_project_analytics(
+            user_id=user_id, project_id=project_id
+        )
+    except HTTPException as e:
+        logger.error(f"admin get_project_analytics HTTP error: {e.detail}")
+        raise e
+    except Exception as e:
+        logger.exception(f"admin get_project_analytics failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Something went wrong: {e}",
+        )
 
 
 @router.get("/project/analytics")

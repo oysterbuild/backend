@@ -9,3 +9,4 @@ from .media_upload import ProjectUpload, ReportUpload
 from .project_milestone import MilestoneStatus
 from .project_report import ProjectReport
 from .payments import Invoice, Transaction
+from .chat import ChatMessage
