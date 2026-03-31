@@ -1,20 +1,21 @@
-from typing import Dict, List
-from sqlalchemy.ext.asyncio import AsyncSession
-from models.building_project import BuildingProject
-from schemas.projects_schema import ProjectSetupDto
-from utils.loggers import setup_logger
-from models.media_upload import ProjectUpload, ReportUpload
-from sqlalchemy import select, func, exists
+from typing import Any, Dict, List
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from models.media_upload import ProjectUpload, ReportUpload
+from utils.loggers import setup_logger
 
 logger = setup_logger("Upload_Media_Service")
 
 
-class UploadMedia:
+class MediaUploadService:
+    """Persist and manage project/report file upload rows."""
+
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
-    async def upload_report_media(self, report_id: str, uploads: list):
+    async def upload_report_media(self, report_id: str, uploads: list) -> None:
         try:
             logger.info(
                 f"Starting media upload for report_id={report_id}, images_count={len(uploads)}"
@@ -35,15 +36,13 @@ class UploadMedia:
             logger.info(
                 f"Successfully uploaded {len(uploads)} images for report_id={report_id}"
             )
-            return None
-
         except Exception as e:
             logger.error(
                 f"Failed to upload project media for report_id={report_id}: {e}",
             )
             raise
 
-    async def upload_project_media(self, project_id: str, images: []):
+    async def upload_project_media(self, project_id: str, images: List[Dict[str, Any]]):
         try:
             logger.info(
                 f"Starting media upload for project_id={project_id}, images_count={len(images)}"
@@ -104,7 +103,7 @@ class UploadMedia:
             raise e
 
     async def update_uploaded_project_media(
-        self, project_id: str, existing_image_ids: list, new_images: []
+        self, project_id: str, existing_image_ids: list, new_images: List[Dict[str, Any]]
     ):
         try:
             current_images = await self.get_uploaded_project_media(project_id)
@@ -123,7 +122,6 @@ class UploadMedia:
                     await self.delete_uploaded_project_media(img.get("id"))
 
             await self.upload_project_media(project_id, new_images)
-            # await self.db.commit()
         except Exception as e:
             raise e
 
@@ -132,7 +130,6 @@ class UploadMedia:
             stmt_image = await self.db.get(ProjectUpload, image_id)
             if stmt_image:
                 await self.db.delete(stmt_image)
-                # await self.db.commit()
         except Exception as e:
             raise e
 
@@ -141,32 +138,8 @@ class UploadMedia:
             stmt_image = await self.db.get(ReportUpload, image_id)
             if stmt_image:
                 await self.db.delete(stmt_image)
-                # await self.db.commit()
         except Exception as e:
             raise e
-
-    # async def update_uploaded_report_media(
-    #     self, report_id: str, existing_image_ids: list, new_images: []
-    # ):
-    #     try:
-    #         current_images = await self.get_uploaded_report(report_id)
-
-    #         current_ids = {image.get("id") for image in current_images}
-
-    #         keep_ids = set(existing_image_ids or [])
-
-    #         delete_ids = current_ids - keep_ids
-
-    #         if delete_ids:
-    #             images_to_delete = [
-    #                 img for img in current_images if img.id in delete_ids
-    #             ]
-    #             for img in images_to_delete:
-    #                 await self.delete_uploaded_report_media(img.get("id"))
-
-    #         await self.upload_report_media(report_id, new_images)
-    #     except Exception as e:
-    #         raise e
 
     async def update_uploaded_report_media(
         self, report_id: str, new_images: List[Dict]
@@ -179,31 +152,26 @@ class UploadMedia:
         """
 
         try:
-            # 1. Get current images from DB
-            current_images = await self.get_uploaded_report(
-                report_id
-            )  # list of ReportUpload ORM objects
+            current_images = await self.get_uploaded_report(report_id)
             current_ids = {str(img.id) for img in current_images}
 
-            # 2. Determine which IDs frontend wants to keep
             keep_ids = {str(img.get("id")) for img in new_images if img.get("id")}
 
-            # 3. IDs to delete
             delete_ids = current_ids - keep_ids
 
-            # 4. Delete removed images
             for img in current_images:
                 if str(img.id) in delete_ids:
                     await self.delete_uploaded_report_media(str(img.id))
 
-            # 5. Save new URLs from frontend
-            # Only include items without an 'id' (new uploads)
             images_to_save = [
                 img for img in new_images if not img.get("id") and img.get("image_url")
             ]
 
             await self.upload_report_media(report_id, images_to_save)
 
-            # await self.db.commit()
         except Exception as e:
             raise e
+
+
+# Live deployments may still import the old name; keep alias.
+UploadMedia = MediaUploadService

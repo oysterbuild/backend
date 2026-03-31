@@ -98,6 +98,7 @@ jobs:
             EMAIL_HOST_PASSWORD=${{ secrets.EMAIL_HOST_PASSWORD }}
             PAYSTACK_SECRET_KEY=${{ secrets.PROD_PAYSTACK_SECRET_KEY }}
             PAYSTACK_PUBLIC_KEY=${{ secrets.PROD_PAYSTACK_PUBLIC_KEY }}
+            ENVIRONMENT=${{ secrets.PROD_ENVIRONMENT }}
             EOF
 
             # ── 4. Build new image (old container still serving) ──────────
