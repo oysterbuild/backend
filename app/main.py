@@ -60,7 +60,13 @@ app = FastAPI(
 
 # Restrict which hosts can hit your API at all
 app.add_middleware(
-    TrustedHostMiddleware, allowed_hosts=["oysterbuild.pm", "localhost", "app"]
+    TrustedHostMiddleware,
+    allowed_hosts=[
+        "oysterbuild.pm",
+        "localhost",
+        "app",
+        "6e67-197-211-59-196.ngrok-free.app",
+    ],
 )
 
 # Trust the proxy — only trust your Caddy container IP
