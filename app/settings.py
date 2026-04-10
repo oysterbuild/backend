@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     debug: str = os.getenv("DEBUG", "True")
     allowed_hosts: str = os.getenv("ALLOWED_HOST", "localhost")
     environment: str = os.getenv("ENVIRONMENT", "development")
+    # Async SQLAlchemy pool (per process). Increase if you run many workers × concurrent requests.
+    db_pool_size: int = int(os.getenv("DB_POOL_SIZE", "10"))
+    db_max_overflow: int = int(os.getenv("DB_MAX_OVERFLOW", "20"))
 
 def get_settings() -> Settings:
     return Settings()

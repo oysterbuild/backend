@@ -21,6 +21,8 @@ engine = create_async_engine(
     ASYNC_DATABASE_URL,
     echo=False,
     pool_pre_ping=True,
+    pool_size=settings.db_pool_size,
+    max_overflow=settings.db_max_overflow,
 )
 
 # create database session
@@ -37,9 +39,8 @@ Base = declarative_base()
 # Database dependency function
 async def get_database() -> AsyncSession:
     async with AsyncSessionLocal() as session:
+        logger.info("Starting Database Session..........")
         try:
-            logger.info("Starting Database Session..........")
             yield session
         finally:
             logger.info("Close Database Session..........")
-            await session.close()

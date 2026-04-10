@@ -181,6 +181,8 @@ async def chat_websocket(
     """
     await websocket.accept()
 
+    # Short-lived DB session for handshake only. Holding a session for the entire
+    # WebSocket lifetime exhausts the SQLAlchemy pool and breaks HTTP endpoints.
     async with AsyncSessionLocal() as db:
         try:
             current_user = await _authenticate_ws(token, db)
@@ -194,63 +196,62 @@ async def chat_websocket(
             await websocket.close(code=exc.code, reason=exc.reason)
             return
 
-        channel = _channel(project_id)
-        pubsub = redis_client.pubsub()
-        await pubsub.subscribe(channel)
+    channel = _channel(project_id)
+    pubsub = redis_client.pubsub()
+    await pubsub.subscribe(channel)
 
-        async def _receive_from_client() -> None:
-            """Read frames from the WebSocket, persist and publish to Redis."""
-            chat_svc = ChatService(db=db)
-            try:
-                while True:
-                    raw = await websocket.receive_text()
-                    try:
-                        data = json.loads(raw)
-                    except json.JSONDecodeError:
-                        await websocket.send_json(
-                            {"error": "Invalid JSON", "detail": raw}
-                        )
-                        continue
+    async def _receive_from_client() -> None:
+        """Read frames from the WebSocket, persist and publish to Redis."""
+        try:
+            while True:
+                raw = await websocket.receive_text()
+                try:
+                    data = json.loads(raw)
+                except json.JSONDecodeError:
+                    await websocket.send_json({"error": "Invalid JSON", "detail": raw})
+                    continue
 
-                    content = data.get("content", "").strip()
-                    if not content:
-                        await websocket.send_json({"error": "Empty message"})
-                        continue
+                content = data.get("content", "").strip()
+                if not content:
+                    await websocket.send_json({"error": "Empty message"})
+                    continue
 
-                    message_type = data.get("message_type", "text")
-                    if message_type not in ("text", "image", "file"):
-                        message_type = "text"
+                message_type = data.get("message_type", "text")
+                if message_type not in ("text", "image", "file"):
+                    message_type = "text"
 
+                async with AsyncSessionLocal() as db:
+                    chat_svc = ChatService(db=db)
                     await chat_svc.handle_ws_message(
                         project_id=project_id,
                         sender_id=current_user["id"],
                         content=content,
                         message_type=message_type,
                     )
-            except WebSocketDisconnect:
-                pass
+        except WebSocketDisconnect:
+            pass
 
-        async def _broadcast_from_redis() -> None:
-            """Forward Redis Pub/Sub messages to the WebSocket client."""
-            try:
-                async for message in pubsub.listen():
-                    if message["type"] == "message":
-                        await websocket.send_text(message["data"])
-            except Exception:
-                pass
-
+    async def _broadcast_from_redis() -> None:
+        """Forward Redis Pub/Sub messages to the WebSocket client."""
         try:
-            await asyncio.gather(
-                _receive_from_client(),
-                _broadcast_from_redis(),
-                return_exceptions=False,
-            )
-        except Exception as exc:
-            logger.warning(f"WS session ended for project {project_id}: {exc}")
-        finally:
-            await pubsub.unsubscribe(channel)
-            await pubsub.aclose()
-            try:
-                await websocket.close()
-            except Exception:
-                pass
+            async for message in pubsub.listen():
+                if message["type"] == "message":
+                    await websocket.send_text(message["data"])
+        except Exception:
+            pass
+
+    try:
+        await asyncio.gather(
+            _receive_from_client(),
+            _broadcast_from_redis(),
+            return_exceptions=False,
+        )
+    except Exception as exc:
+        logger.warning(f"WS session ended for project {project_id}: {exc}")
+    finally:
+        await pubsub.unsubscribe(channel)
+        await pubsub.aclose()
+        try:
+            await websocket.close()
+        except Exception:
+            pass
