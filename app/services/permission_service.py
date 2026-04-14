@@ -152,12 +152,7 @@ class PermissionService:
             raise e
 
     # super admin:
-    async def has_project_permission(
-        self,
-        user_id: str,
-        project_id: str,
-        permission_name: str,
-    ):
+    async def has_project_permission(self, user_id: str):
         try:
             # 1. System user → allow
             if await self.is_system_admin(user_id):
@@ -166,22 +161,7 @@ class PermissionService:
             if await self.is_inspector(user_id):
                 return True
 
-            # # 2. Find project membership
-            # stmt = (
-            #     select(Permission.id)
-            #     .join(RolePermission, Permission.id == RolePermission.permission_id)
-            #     .join(Role, Role.id == RolePermission.role_id)
-            #     # .join(ProjectMember, ProjectMember.role_id == Role.id)
-            #     .where(
-            #         ProjectMember.user_id == user_id,
-            #         ProjectMember.project_id == project_id,
-            #         ProjectMember.is_active.is_(True),
-            #         Permission.name == permission_name,
-            #     )
-            # )
-
-            # result = await self.db.execute(stmt)
-            return True
+            return False
         except Exception as e:
             raise e
 
