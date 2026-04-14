@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     email_host_password: str = os.getenv("EMAIL_HOST_PASSWORD", " ")
     paystack_secret_key: str = os.getenv("PAYSTACK_SECRET_KEY", " ")
     paystack_public_key: str = os.getenv("PAYSTACK_PUBLIC_KEY", " ")
+    stripe_secret_key: str = os.getenv("STRIPE_SECRET_KEY", "")
+    stripe_webhook_secret: str = os.getenv("STRIPE_WEBHOOK_SECRET", "")
     celery_broker_url: str = os.getenv("REDIS_URL", " ")
     celery_result_backend: str = os.getenv("REDIS_URL", " ")
     cors_origins: str = os.getenv("ALLOWED_ORIGIN", "http://localhost:8000")
@@ -32,6 +34,7 @@ class Settings(BaseSettings):
     # Async SQLAlchemy pool (per process). Increase if you run many workers × concurrent requests.
     db_pool_size: int = int(os.getenv("DB_POOL_SIZE", "10"))
     db_max_overflow: int = int(os.getenv("DB_MAX_OVERFLOW", "20"))
+
 
 def get_settings() -> Settings:
     return Settings()
