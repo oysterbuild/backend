@@ -420,7 +420,7 @@ class StripeServiceBaseAPIClient:
             )
             return {
                 "client_secret": intent.client_secret,
-                "reference": intent.id,   # pi_xxx — stored as provider_reference
+                "reference": intent.id,  # pi_xxx — stored as provider_reference
                 "authorization_url": None,
             }
         except stripe_lib.StripeError as e:
