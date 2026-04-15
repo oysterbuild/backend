@@ -6,6 +6,7 @@ from models.project_members import ProjectMember
 from models.users import User
 from utils.loggers import setup_logger
 from utils.pagination import normalize_pagination
+from services.permission_service import PermissionService
 
 logger = setup_logger("Inspector_Service")
 
@@ -13,12 +14,18 @@ logger = setup_logger("Inspector_Service")
 class InspectorService:
     """Project inspector assignment and listing (routes unchanged; only service API is renamed)."""
 
+    # only admins can access this services
+
     def __init__(self, db: AsyncSession):
         self.db = db
+        self.perms_role = PermissionService(db)
 
     async def list_assigned_inspectors(
         self, project_id: str, user_id: str, page: int = 1, limit: int = 10
     ):
+        if not await self.perms_role.is_system_admin(user_id):
+            raise HTTPException(status_code=403, detail="Permission denied")
+
         page, limit, offset = normalize_pagination(page, limit)
 
         query = (
@@ -62,6 +69,10 @@ class InspectorService:
 
     async def assign_inspector_to_project(self, payload: dict, user_id: str):
         try:
+
+            if not await self.perms_role.is_system_admin(user_id):
+                raise HTTPException(status_code=403, detail="Permission denied")
+
             notify_me = payload.pop("notify_me")
             project_member_instance = ProjectMember(**payload)
             self.db.add(project_member_instance)
@@ -87,22 +98,35 @@ class InspectorService:
             ) from e
 
     async def list_inspectors(self, user_id: str, page: int, limit: int):
-        page, limit, offset = normalize_pagination(page, limit)
+        try:
+            if not await self.perms_role.is_system_admin(user_id):
+                raise HTTPException(status_code=403, detail="Permission denied")
 
-        stmt_inspectors = (
-            select(User).where(User.role == "INSPECTOR").offset(offset).limit(limit)
-        )
-        result = (await self.db.execute(stmt_inspectors)).scalars().all()
-        return {
-            "data": result,
-            "message": "Inspectors Fetched Successfully",
-        }
+            page, limit, offset = normalize_pagination(page, limit)
 
-    async def remove_project_inspector(
-        self, project_member_id: str, user_id: str
-    ):
+            stmt_inspectors = (
+                select(User).where(User.role == "INSPECTOR").offset(offset).limit(limit)
+            )
+            result = (await self.db.execute(stmt_inspectors)).scalars().all()
+            return {
+                "data": result,
+                "message": "Inspectors Fetched Successfully",
+            }
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.exception(f"list_inspectors failed: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="An error occurred while listing the inspectors.",
+            )
+
+    async def remove_project_inspector(self, project_member_id: str, user_id: str):
         """Remove a project member row. ``project_member_id`` is ``ProjectMember.id`` (path param is still named inspector_id on the router)."""
         try:
+            if not await self.perms_role.is_system_admin(user_id):
+                raise HTTPException(status_code=403, detail="Permission denied")
+
             result = await self.db.execute(
                 select(ProjectMember).where(ProjectMember.id == project_member_id)
             )
