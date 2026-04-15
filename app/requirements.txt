@@ -63,3 +63,6 @@ vine==5.1.0
 watchfiles==1.1.1
 wcwidth==0.6.0
 websockets==16.0
+
+
+stripe listen --forward-to https://4fdd-197-211-59-110.ngrok-free.app/api/v1/payment/stripe/webhook-events
