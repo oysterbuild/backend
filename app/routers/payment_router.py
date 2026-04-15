@@ -29,6 +29,7 @@ settings = get_settings()
 
 logger = setup_logger("payment_route")
 
+
 # make singleton
 def get_payment_service(db: AsyncSession = Depends(get_database)) -> PaymentService:
     return PaymentService(db=db)
@@ -41,8 +42,8 @@ def get_plan_service(db: AsyncSession = Depends(get_database)) -> PaymentService
 @router.post("/invoice")
 async def roles(
     invoice_id: str = File(..., description="invoice id"),
-    provider: Literal["PAYSTACK", "FLUTTERWAVE"] = File(
-        ..., examples=["PAYSTACK", "FLUTTERWAVE"]
+    provider: Literal["PAYSTACK", "FLUTTERWAVE", "STRIPE"] = File(
+        ..., examples=["PAYSTACK", "FLUTTERWAVE", "STRIPE"]
     ),
     payment_service: PaymentService = Depends(get_payment_service),
     current_user: dict = Depends(get_current_user),
@@ -89,18 +90,47 @@ async def paystack_webhook_event(
     return {"status": "success"}
 
 
+@router.post("/stripe/webhook-events")
+async def stripe_webhook_event(
+    request: Request,
+    payment_service: PaymentService = Depends(get_payment_service),
+):
+    body_bytes = await request.body()
+    sig_header = request.headers.get("stripe-signature")
+
+    if not sig_header:
+        raise HTTPException(
+            detail="Missing Stripe-Signature header",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    import stripe as stripe_lib
+
+    stripe_lib.api_key = settings.stripe_secret_key
+
+    try:
+        event = stripe_lib.Webhook.construct_event(
+            body_bytes, sig_header, settings.stripe_webhook_secret
+        )
+    except stripe_lib.error.SignatureVerificationError:
+        logger.warning("[STRIPE_WEBHOOK] Invalid signature rejected")
+        raise HTTPException(
+            detail="Invalid Stripe webhook signature",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    await payment_service.payment_webhook(dict(event), "STRIPE")
+    return {"status": "success"}
+
+
 @router.get("/plans")
 async def get_plans(
     current_user: dict = Depends(get_current_user),
-    plan_service:PlansService = Depends(get_plan_service)
+    plan_service: PlansService = Depends(get_plan_service),
 ):
     try:
         resp = await plan_service.get_plans()
-        return {
-            "message":"Plan Fetch Successfull",
-            "data":resp,
-            "status":True
-        }
+        return {"message": "Plan Fetch Successfull", "data": resp, "status": True}
     except HTTPException as e:
         logger.error(f"HTTP Exception: {e.detail}")
         raise e
@@ -110,4 +140,3 @@ async def get_plans(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Something went wrong: {e}",
         )
-

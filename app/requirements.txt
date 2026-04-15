@@ -51,6 +51,7 @@ regex==2025.11.3
 six==1.17.0
 SQLAlchemy==2.0.45
 starlette==0.50.0
+stripe==12.2.0
 typing-inspection==0.4.2
 typing_extensions==4.15.0
 tzdata==2025.3
@@ -62,3 +63,6 @@ vine==5.1.0
 watchfiles==1.1.1
 wcwidth==0.6.0
 websockets==16.0
+
+
+stripe listen --forward-to https://4fdd-197-211-59-110.ngrok-free.app/api/v1/payment/stripe/webhook-events

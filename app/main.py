@@ -66,6 +66,7 @@ app.add_middleware(
         "localhost",
         "app",
         "6e67-197-211-59-196.ngrok-free.app",
+        "4fdd-197-211-59-110.ngrok-free.app",
     ],
 )
 
