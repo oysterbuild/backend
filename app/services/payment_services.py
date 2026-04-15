@@ -414,8 +414,9 @@ class StripeServiceBaseAPIClient:
             intent = await asyncio.to_thread(
                 stripe_lib.PaymentIntent.create,
                 amount=int(float(data["amount"]) * 100),
-                currency=data.get("currency", "usd").lower(),
-                payment_method_types=["card"],  # covers Apple Pay tokenised as card
+                currency=data.get("currency", "ngn").lower(),
+                automatic_payment_methods={"enabled": True},
+                # payment_method_types=["card"],  # covers Apple Pay tokenised as card
                 metadata={"invoice_id": data.get("invoice_id", "")},
             )
             return {
