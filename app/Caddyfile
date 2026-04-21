@@ -1,4 +1,4 @@
-oysterbuild.pm, www.oysterbuild.pm {
+oysterbuild.pm, www.oysterbuild.pm, periscopebyoysterbuild.com, www.periscopebyoysterbuild.com {
     reverse_proxy app:8000 {
         health_uri      /health
         health_interval 10s
