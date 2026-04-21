@@ -132,7 +132,7 @@ jobs:
             docker compose up -d --no-deps caddy
             echo "✅ Caddy running"
 
-            # ── 9. Cleanup ─────────────────────────────────────────────────
+            # ── 10. Cleanup ─────────────────────────────────────────────────
             docker image prune -f
             echo "✅ Deployment complete!"
 
