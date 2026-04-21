@@ -1,15 +1,17 @@
 import asyncio
+from typing import Optional
 from sqlalchemy import exc
 from sqlalchemy.ext.asyncio import AsyncSession
 from models.building_project import BuildingProject
 from models.project_members import ProjectMember
 from utils.loggers import setup_logger
-from services.upload_service import UploadMedia
+from services.upload_service import MediaUploadService
 from schemas.projects_schema import ProjectResponse
 from services.plan_usage_service import ProjectPlanUsageService
 from fastapi import HTTPException, status
 from models.core import Role
-from sqlalchemy import select, func, exists, update, and_
+from sqlalchemy import select, func, exists, update, and_, case
+from datetime import date
 from constant.roles import PROJECT_OWNER
 from models.project_report import ProjectReport
 from schemas.report_schema import ProjectReportRequest, ProjectReportResponse
@@ -31,7 +33,7 @@ from models.plans import PaymentHistory, Plan, PlanPackageUsageCount, Package
 from services.payment_services import PaymentService
 from models.payments import Invoice
 from models.media_upload import ProjectUpload, ReportUpload
-from datetime import datetime,timezone,timedelta
+from datetime import datetime, timezone, timedelta
 from models.users import User
 from services.email_service import get_email_service
 
@@ -41,7 +43,7 @@ logger = setup_logger("Project_Service")
 class ProjectSetupService:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
-        self.media_upload = UploadMedia(db=db)
+        self.media_upload = MediaUploadService(db=db)
         self.package_useage = ProjectPlanUsageService(db=db)
         self.organization_admin = PROJECT_OWNER
         self.permission = "Insufficient permission to complete the action"
@@ -77,18 +79,6 @@ class ProjectSetupService:
             await self.db.refresh(project)
             logger.info(f"[PROJECT_CREATE] Base record created: ID {project.id}")
 
-            # 3. Assign Owner Role
-            role_stmt = select(Role.id).where(Role.name == self.organization_admin)
-            role_id = (await self.db.execute(role_stmt)).scalar_one_or_none()
-
-            project_owner = ProjectMember(
-                project_id=project.id,
-                user_id=user_id,
-                role_id=role_id,
-            )
-            self.db.add(project_owner)
-            await self.db.flush()
-
             # 4. Handle Media
             if images:
                 logger.info(
@@ -115,6 +105,7 @@ class ProjectSetupService:
             return project_resp
 
         except HTTPException as http_exec:
+            await self.db.rollback()  # IMPORTANT
             raise http_exec
 
         except Exception as e:
@@ -139,12 +130,7 @@ class ProjectSetupService:
             limit = min(limit, 100)
             offset = (page - 1) * limit
 
-            # Filter by membership
-            subquery = select(ProjectMember.project_id).where(
-                ProjectMember.user_id == user_id
-            )
-
-            stmt = select(BuildingProject).where(BuildingProject.id.in_(subquery))
+            stmt = select(BuildingProject).where(BuildingProject.owner_id == user_id)
 
             if project_status:
                 stmt = stmt.where(BuildingProject.status == project_status)
@@ -160,7 +146,7 @@ class ProjectSetupService:
             count_stmt = (
                 select(func.count())
                 .select_from(BuildingProject)
-                .where(BuildingProject.id.in_(subquery))
+                .where(BuildingProject.owner_id == user_id)
             )
 
             if project_status:
@@ -210,35 +196,51 @@ class ProjectSetupService:
             logger.error(f"[PROJECT_LIST] Error for User {user_id}: {str(e)}")
             raise Exception(f"Failed to fetch projects: {str(e)}")
 
+    async def _assert_project_access(
+        self, user_id: str, project_id: str, project: Optional[BuildingProject] = None
+    ) -> None:
+        """
+        Raises HTTP 403 if the user is not the project owner, a project member,
+        or a super admin. Call this after the project has been fetched.
+        """
+
+        if project is None:
+            project = await self.db.get(BuildingProject, project_id)
+
+        if not project:
+            logger.warning(f"[PROJECT_GET] Not Found: Project {project_id}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Project not found",
+            )
+
+        if await self.perms_role.is_system_admin(user_id):
+            return
+
+        membership_stmt = select(
+            exists().where(
+                ProjectMember.user_id == user_id,
+                ProjectMember.project_id == project_id,
+            )
+        )
+        is_member = await self.db.scalar(membership_stmt)
+
+        if not (is_member or str(project.owner_id) == user_id):
+            logger.warning(
+                f"[PROJECT_GET] Access Denied: User {user_id} on Project {project_id}"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to view this project",
+            )
+
     async def get_single_project(self, user_id: str, project_id: str):
         """Retrieves full details, media, and package status for a specific project."""
         try:
             logger.info(f"[PROJECT_GET] User {user_id} accessing Project {project_id}")
 
-            # 1. Membership Check
-            membership_stmt = select(
-                exists().where(
-                    ProjectMember.user_id == user_id,
-                    ProjectMember.project_id == project_id,
-                )
-            )
-            if not await self.db.scalar(membership_stmt):
-                logger.warning(
-                    f"[PROJECT_GET] Access Denied: User {user_id} on Project {project_id}"
-                )
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="You do not have permission to view this project",
-                )
-
-            # 2. Fetch Project
             project = await self.db.get(BuildingProject, project_id)
-            if not project:
-                logger.warning(f"[PROJECT_GET] Not Found: Project {project_id}")
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Project not found",
-                )
+            await self._assert_project_access(user_id, project_id, project)
 
             # 3. Enrich Data
             stmt_recent_report = (
@@ -254,18 +256,22 @@ class ProjectSetupService:
             )
 
             # Get the plan Objects
-            project.plan = await self.db.get(Plan,project.plan_id) if project.plan_id else {}
+            project.plan = (
+                await self.db.get(Plan, project.plan_id) if project.plan_id else {}
+            )
 
             # Determine is he can still post report for the project
-            project.has_report_package = (await self.package_useage.has_report_package(
+            project.has_report_package = await self.package_useage.has_report_package(
                 project_id
-            ))
+            )
 
             # only the owner has this actions
-            project.has_report_action = (await self.perms_role.has_project_permission(user_id,project_id,CAN_MANAGE_REPORT))
+            project.has_report_action = await self.perms_role.is_inspector(user_id)
 
             # Only project owner can see this
-            project.has_payment_action = (True if str(project.owner_id) == user_id else False)
+            project.has_payment_action = (
+                True if str(project.owner_id) == user_id else False
+            )
 
             # Media
             project.images = await self.media_upload.get_uploaded_project_media(
@@ -287,27 +293,8 @@ class ProjectSetupService:
         try:
             logger.info(f"[REPORTS_GET] Fetching reports for Project {project_id}")
 
-            # 1. Permission and Membership Check
-            if not await self.perms_role.has_project_permission(
-                user_id, project_id, CAN_VIEW_REPORT
-            ):
-                logger.warning(f"[REPORTS_GET] Permission Denied: User {user_id}")
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail=self.permission_denied_msg,
-                )
-
-            membership_stmt = select(
-                exists().where(
-                    ProjectMember.user_id == user_id,
-                    ProjectMember.project_id == project_id,
-                )
-            )
-            if not await self.db.scalar(membership_stmt):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Project membership required",
-                )
+            project = await self.db.get(BuildingProject, project_id)
+            await self._assert_project_access(user_id, project_id, project)
 
             # 2. Query
             page, limit = max(page, 1), min(limit, 100)
@@ -375,13 +362,11 @@ class ProjectSetupService:
         try:
             logger.info(f"[REPORT_SINGLE] User {user_id} fetching Report {report_id}")
 
-            if not await self.perms_role.has_project_permission(
-                user_id, project_id, CAN_VIEW_REPORT
-            ):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail=self.permission_denied_msg,
-                )
+            # if not await self.perms_role.has_project_permission(user_id):
+            #     raise HTTPException(
+            #         status_code=status.HTTP_403_FORBIDDEN,
+            #         detail=self.permission_denied_msg,
+            #     )
 
             report = await self.db.get(ProjectReport, report_id)
             if not report:
@@ -389,6 +374,9 @@ class ProjectSetupService:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND, detail="Report not found"
                 )
+
+            project = await self.db.get(BuildingProject, project_id)
+            await self._assert_project_access(user_id, project_id, project)
 
             user = await self.db.get(User, report.submitted_by)
 
@@ -417,9 +405,7 @@ class ProjectSetupService:
             )
 
             # 1. Permission Check
-            if not await self.perms_role.has_project_permission(
-                user_id, project_id, CAN_MANAGE_REPORT
-            ):
+            if not await self.perms_role.has_project_permission(user_id):
                 logger.warning(
                     f"[REPORT_CREATE] Permission Denied: User {user_id} on Project {project_id}"
                 )
@@ -506,9 +492,7 @@ class ProjectSetupService:
             )
 
             # 1. Permission Check
-            if not await self.perms_role.has_project_permission(
-                user_id, project_id, CAN_MANAGE_REPORT
-            ):
+            if not await self.perms_role.has_project_permission(user_id):
                 logger.warning(f"[REPORT_UPDATE] Permission Denied: User {user_id}")
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN, detail=self.permission
@@ -532,8 +516,17 @@ class ProjectSetupService:
                     status_code=status.HTTP_404_NOT_FOUND, detail="Report not found"
                 )
 
+            # check make sure the creator can edit it:
+            if str(report_stmt.submitted_by) != user_id:
+                logger.warning(
+                    f"[REPORT_CREATE] Permission Denied: User {user_id} on Project {project_id}"
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You dont have permssion to Edit request for an edit please...",
+                )
+
             # 3. Process Data and Updates
-            # existing_image_ids = report_dto.pop("existing_image_ids", [])
             report_dict = report_dto.copy()
 
             for key, value in report_dict.items():
@@ -546,20 +539,7 @@ class ProjectSetupService:
                 logger.info(
                     f"[REPORT_UPDATE] Processing {len(images)} new images for Report {report_id}"
                 )
-                # new_images = await asyncio.gather(
-                #     *(
-                #         upload_file_optimized(
-                #             img, "report_image", user_id, current_user, "REPORT"
-                #         )
-                #         for img in images
-                #     )
-                # )
                 await self.media_upload.update_uploaded_report_media(report_id, images)
-            # else:
-            # If no new images, we still might need to remove deleted ones
-            # await self.media_upload.update_uploaded_report_media(
-            #     report_id, existing_image_ids, []
-            # )
 
             await self.db.commit()
             await self.db.refresh(report_stmt)
@@ -587,9 +567,7 @@ class ProjectSetupService:
                 f"[REPORT_DELETE] Start: User {user_id} deleting Report {report_id}"
             )
 
-            if not await self.perms_role.has_project_permission(
-                user_id, project_id, CAN_MANAGE_REPORT
-            ):
+            if not await self.perms_role.has_project_permission(user_id):
                 logger.warning(f"[REPORT_DELETE] Permission Denied: User {user_id}")
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN, detail=self.permission
@@ -640,17 +618,6 @@ class ProjectSetupService:
             logger.info(
                 f"[PROJECT_UPDATE] Start: User {user_id} updating Project {project_id}"
             )
-
-            # 1. Permission Check
-            if not await self.perms_role.has_project_permission(
-                user_id, project_id, CAN_MANAGE_PROJECT
-            ):
-                logger.warning(
-                    f"[PROJECT_UPDATE] Permission Denied: User {user_id} cannot manage Project {project_id}"
-                )
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN, detail=self.permission
-                )
 
             # 2. Fetch and Verify Ownership
             project_stmt = await self.db.get(BuildingProject, project_id)
@@ -734,17 +701,6 @@ class ProjectSetupService:
                 f"[PROJECT_DELETE] Start: User {user_id} attempting to delete Project {project_id}"
             )
 
-            # 1. Permission Check
-            if not await self.perms_role.has_project_permission(
-                user_id, project_id, CAN_MANAGE_PROJECT
-            ):
-                logger.warning(
-                    f"[PROJECT_DELETE] Permission Denied: User {user_id} cannot delete Project {project_id}"
-                )
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN, detail=self.permission
-                )
-
             # 2. Fetch and Verify Ownership
             stmt = await self.db.get(BuildingProject, project_id)
             if not stmt:
@@ -792,16 +748,17 @@ class ProjectSetupService:
             offset = (page - 1) * limit
 
             # Permission Check
-            has_permission = await self.perms_role.has_project_permission(
-                user_id, project_id, CAN_VIEW_PROJECT_PAYMENT
-            )
-            if not has_permission:
-                logger.warning(
-                    f"[PAYMENTS] Access Denied: User {user_id} lacks permission for Project {project_id}"
-                )
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN, detail=self.permission
-                )
+            # has_permission = await self.perms_role.has_project_permission(user_id)
+            # if not has_permission:
+            #     logger.warning(
+            #         f"[PAYMENTS] Access Denied: User {user_id} lacks permission for Project {project_id}"
+            #     )
+            #     raise HTTPException(
+            #         status_code=status.HTTP_403_FORBIDDEN, detail=self.permission
+            #     )
+
+            project = await self.db.get(BuildingProject, project_id)
+            await self._assert_project_access(user_id, project_id, project)
 
             # Query building
             payments_stmt = (
@@ -824,7 +781,7 @@ class ProjectSetupService:
             packages_list = []
 
             for payment, plan in rows:
-                if payment.status == "Active":
+                if payment.status in ["Active", "Paid"]:
                     usage_stmt = (
                         select(Package, PlanPackageUsageCount.usage_count)
                         .outerjoin(
@@ -901,16 +858,17 @@ class ProjectSetupService:
             )
 
             # Permission Check
-            has_permission = await self.perms_role.has_project_permission(
-                user_id, project_id, CAN_VIEW_PROJECT_PAYMENT
-            )
-            if not has_permission:
-                logger.warning(
-                    f"[PAYMENTS] Access Denied: User {user_id} lacks permission to view record {payment_id}"
-                )
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN, detail=self.permission
-                )
+            # has_permission = await self.perms_role.has_project_permission(user_id)
+            # if not has_permission:
+            #     logger.warning(
+            #         f"[PAYMENTS] Access Denied: User {user_id} lacks permission to view record {payment_id}"
+            #     )
+            #     raise HTTPException(
+            #         status_code=status.HTTP_403_FORBIDDEN, detail=self.permission
+            #     )
+
+            project = await self.db.get(BuildingProject, project_id)
+            await self._assert_project_access(user_id, project_id, project)
 
             stmt = (
                 select(PaymentHistory, Plan)
@@ -936,7 +894,7 @@ class ProjectSetupService:
             )
 
             packages_list = []
-            if result_payment.status == "Active":
+            if result_payment.status in ["Active", "Paid"]:
                 usage_stmt = (
                     select(Package, PlanPackageUsageCount.usage_count)
                     .outerjoin(
@@ -1005,8 +963,10 @@ class ProjectSetupService:
             return invoice_id
 
         except HTTPException as http_exc:
+            await self.db.rollback()  # IMPORTANT
             raise http_exc
         except Exception as e:
+            await self.db.rollback()  # IMPORTANT
             logger.error(
                 f"[PAYMENTS] Critical error fetching record: {str(e)}",
                 exc_info=True,
@@ -1014,3 +974,442 @@ class ProjectSetupService:
             raise Exception(
                 f"Internal server error while fetching single payment record: {str(e)}"
             )
+
+    async def update_project_report_status(self, user_id: str, report_id: str):
+        try:
+            # check permission for the user:
+            report = await self.db.get(ProjectReport, report_id)
+            if not report:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Project Report Id Doesnt Exist",
+                )
+            # check admin per
+            if not await self.perms_role.is_system_admin(user_id):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Permission denied",
+                )
+
+            if report.approved:
+                # update it
+                report.approved = False
+                message = "Report Status changed to pending"
+            else:
+                report.approved = True
+                message = "Report Status changed to approved"
+
+            await self.db.commit()
+            await self.db.refresh(report)
+            return {"message": message, "data": report}
+        except HTTPException as http_exc:
+            await self.db.rollback()  # IMPORTANT
+            raise http_exc
+        except Exception as e:
+            logger.error(
+                f"[PAYMENTS] Critical error fetching record: {str(e)}",
+                exc_info=True,
+            )
+            await self.db.rollback()  # IMPORTANT
+            raise Exception(
+                f"Internal server error while fetching single payment record: {str(e)}"
+            )
+
+    async def get_all_project(
+        self,
+        user_id: str,
+        page: int = 1,
+        limit: int = 10,
+        project_status: str | None = None,
+    ):
+        """Fetches a paginated list of projects associated with the user."""
+        try:
+            logger.info(
+                f"[PROJECT_LIST] Fetching projects for User {user_id} (Page {page})"
+            )
+
+            page = max(page, 1)
+            limit = min(limit, 100)
+            offset = (page - 1) * limit
+
+            # check the user permission
+
+            stmt = select(BuildingProject)
+
+            if project_status and project_status in [
+                "Active",
+                "Pending",
+                "Draft",
+                "Completed",
+                "Cancelled",
+            ]:
+                stmt = stmt.where(BuildingProject.status == project_status)
+
+            if project_status and project_status in [
+                "Expired",
+                "Awaiting_Payment",
+                "Paid",
+            ]:  # payment_status
+                stmt = stmt.where(BuildingProject.status == project_status)
+
+            # Execution
+            result = await self.db.execute(
+                stmt.order_by(BuildingProject.created_at.desc())
+                .offset(offset)
+                .limit(limit)
+            )
+
+            # Count total for meta_data
+            count_stmt = select(func.count()).select_from(BuildingProject)
+
+            if project_status:
+                count_stmt = count_stmt.where(BuildingProject.status == project_status)
+
+            total = await self.db.scalar(count_stmt)  # total count scale
+
+            projects = result.scalars().all()
+            # -------------------------
+            # Get images for projects
+            # -------------------------
+            project_ids = [p.id for p in projects]
+
+            image_stmt = (
+                select(ProjectUpload)
+                .where(ProjectUpload.project_id.in_(project_ids))
+                .order_by(ProjectUpload.uploaded_at.asc())
+            )
+
+            image_result = await self.db.execute(image_stmt)
+            images = image_result.scalars().all()
+
+            # group max 2 images per project
+            project_image_map = {}
+            for img in images:
+                pid = img.project_id
+                if pid not in project_image_map:
+                    project_image_map[pid] = []
+
+                if len(project_image_map[pid]) < 2:
+                    project_image_map[pid].append(img.file_url)
+
+            # attach images to projects
+            data = []
+            for project in projects:
+                project_dict = project.__dict__.copy()
+                project_dict["images"] = project_image_map.get(project.id, [])
+                data.append(project_dict)
+
+            return {
+                "meta_data": {"limit": limit, "page": page, "total": total},
+                "data": data,
+                "message": "Projects fetched successfully",
+            }
+
+        except Exception as e:
+            logger.error(f"[PROJECT_LIST] Error for User {user_id}: {str(e)}")
+            raise Exception(f"Failed to fetch projects: {str(e)}")
+
+    async def get_inspector_project(
+        self,
+        user_id: str,
+        page: int = 1,
+        limit: int = 10,
+        project_status: str | None = None,
+    ):
+        """Fetches a paginated list of projects associated with the user."""
+        try:
+            logger.info(
+                f"[PROJECT_LIST] Fetching projects for User {user_id} (Page {page})"
+            )
+
+            page = max(page, 1)
+            limit = min(limit, 100)
+            offset = (page - 1) * limit
+
+            # Filter by membership
+            subquery = select(ProjectMember.project_id).where(
+                ProjectMember.user_id == user_id
+            )
+
+            stmt = select(BuildingProject).where(BuildingProject.id.in_(subquery))
+
+            if project_status and project_status in [
+                "Active",
+                "Pending",
+                "Draft",
+                "Completed",
+                "Cancelled",
+            ]:
+                stmt = stmt.where(BuildingProject.status == project_status)
+
+            # Execution
+            result = await self.db.execute(
+                stmt.order_by(BuildingProject.created_at.desc())
+                .offset(offset)
+                .limit(limit)
+            )
+
+            # Count total for meta_data
+            count_stmt = (
+                select(func.count())
+                .select_from(BuildingProject)
+                .where(BuildingProject.id.in_(subquery))
+            )
+
+            if project_status:
+                count_stmt = count_stmt.where(BuildingProject.status == project_status)
+
+            total = await self.db.scalar(count_stmt)  # total count scale
+
+            projects = result.scalars().all()
+            # -------------------------
+            # Get images for projects
+            # -------------------------
+            project_ids = [p.id for p in projects]
+
+            image_stmt = (
+                select(ProjectUpload)
+                .where(ProjectUpload.project_id.in_(project_ids))
+                .order_by(ProjectUpload.uploaded_at.asc())
+            )
+
+            image_result = await self.db.execute(image_stmt)
+            images = image_result.scalars().all()
+
+            # group max 2 images per project
+            project_image_map = {}
+            for img in images:
+                pid = img.project_id
+                if pid not in project_image_map:
+                    project_image_map[pid] = []
+
+                if len(project_image_map[pid]) < 2:
+                    project_image_map[pid].append(img.file_url)
+
+            # attach images to projects
+            data = []
+            for project in projects:
+                project_dict = project.__dict__.copy()
+                project_dict["images"] = project_image_map.get(project.id, [])
+                data.append(project_dict)
+
+            return {
+                "meta_data": {"limit": limit, "page": page, "total": total},
+                "data": data,
+                "message": "Projects fetched successfully",
+            }
+
+        except Exception as e:
+            logger.error(f"[PROJECT_LIST] Error for User {user_id}: {str(e)}")
+            raise Exception(f"Failed to fetch projects: {str(e)}")
+
+    async def get_all_project_analytics(self, user_id: str):
+        try:
+            # check permission
+            if not await self.perms_role.is_system_admin(user_id):
+                raise HTTPException(status_code=403, detail="Permission denied")
+
+            # -----------------------------
+            # 1. PROJECT ANALYTICS
+            # -----------------------------
+            project_stmt = select(
+                func.count().label("total_projects"),
+                func.count(case((BuildingProject.status == "Active", 1))).label(
+                    "active"
+                ),
+                func.count(case((BuildingProject.status == "Completed", 1))).label(
+                    "completed"
+                ),
+                func.count(case((BuildingProject.status == "Pending", 1))).label(
+                    "pending"
+                ),
+                func.count(case((BuildingProject.status == "Draft", 1))).label("draft"),
+            )
+
+            project_result = await self.db.execute(project_stmt)
+            project_data = project_result.first()
+
+            # -----------------------------
+            # 2. REPORT ANALYTICS
+            # -----------------------------
+            report_stmt = select(
+                func.count(ProjectReport.id).label("total_reports"),
+                func.count(case((ProjectReport.approved == False, 1))).label(
+                    "pending_reports"
+                ),
+            )
+
+            report_result = await self.db.execute(report_stmt)
+            report_data = report_result.first()
+
+            # -----------------------------
+            # 3. PAYMENT HISTORY ANALYTICS
+            # -----------------------------
+            payment_stmt = select(
+                func.count(PaymentHistory.id).label("total_payments"),
+                func.count(case((PaymentHistory.status == "Pending", 1))).label(
+                    "pending"
+                ),
+                func.count(
+                    case((PaymentHistory.status.in_(["Overdue", "Expired"]), 1))
+                ).label("overdue"),
+                func.count(
+                    case((PaymentHistory.status.in_(["Active", "Paid"]), 1))
+                ).label("paid"),
+                # Real-time late detection
+                func.count(
+                    case(
+                        (
+                            (PaymentHistory.next_billing_date < date.today())
+                            & (PaymentHistory.status != "Paid"),
+                            1,
+                        )
+                    )
+                ).label("late_payments"),
+            )
+
+            payment_result = await self.db.execute(payment_stmt)
+            payment_data = payment_result.first()
+
+            # -----------------------------
+            # FINAL RESPONSE
+            # -----------------------------
+            return {
+                "projects": {
+                    "total": project_data.total_projects,
+                    "active": project_data.active,
+                    "completed": project_data.completed,
+                    "pending": project_data.pending,
+                    "draft": project_data.draft,
+                },
+                "reports": {
+                    "total": report_data.total_reports,
+                    "pending": report_data.pending_reports,
+                },
+                "billing": {
+                    "total": payment_data.total_payments,
+                    "paid": payment_data.paid,
+                    "pending": payment_data.pending,
+                    "overdue": payment_data.overdue,
+                    "late_payments": payment_data.late_payments,
+                },
+            }
+
+        except HTTPException as http_e:
+            raise http_e
+        except Exception as e:
+            logger.error(f"[PROJECT_ANALYTICS] Error for User {user_id}: {str(e)}")
+            raise Exception(f"Failed to fetch analytics")
+
+    async def get_project_analytics(self, user_id: str, project_id: str):
+        try:
+            logger.info(
+                f"[PROJECT_ANALYTICS] Fetching analytics for Project {project_id}"
+            )
+
+            # check permission
+            if not await self.perms_role.is_system_admin(user_id):
+                raise HTTPException(status_code=403, detail="Permission denied")
+
+            # 1. Fetch project
+            project_stmt = select(BuildingProject).where(
+                BuildingProject.id == project_id,
+            )
+            project_result = await self.db.execute(project_stmt)
+            project = project_result.scalar_one_or_none()
+
+            if not project:
+                return None
+
+            # 2. Reports analytics
+            report_stmt = select(
+                func.count(ProjectReport.id).label("total_reports"),
+                func.count(case((ProjectReport.approved == False, 1))).label(
+                    "pending_reports"
+                ),
+            ).where(ProjectReport.project_id == project_id)
+
+            report_result = await self.db.execute(report_stmt)
+            report_data = report_result.first()
+
+            # 3. Payment history analytics
+            payment_stmt = select(
+                func.count(PaymentHistory.id).label("total_payments"),
+                func.count(case((PaymentHistory.status == "Pending", 1))).label(
+                    "pending"
+                ),
+                func.count(
+                    case((PaymentHistory.status.in_(["Overdue", "Expired"]), 1))
+                ).label("overdue"),
+                func.count(
+                    case((PaymentHistory.status.in_(["Active", "Paid"]), 1))
+                ).label("paid"),
+                # Real-time late detection
+                func.count(
+                    case(
+                        (
+                            (PaymentHistory.next_billing_date < date.today())
+                            & (PaymentHistory.status != "Paid"),
+                            1,
+                        )
+                    )
+                ).label("late_payments"),
+            ).where(PaymentHistory.project_id == project_id)
+
+            payment_result = await self.db.execute(payment_stmt)
+            payment_data = payment_result.first()
+
+            # 4. Final response
+            return {
+                "project_id": project_id,
+                "reports": {
+                    "total": report_data.total_reports,
+                    "pending": report_data.pending_reports,
+                },
+                "billing": {
+                    "total": payment_data.total_payments,
+                    "paid": payment_data.paid,
+                    "pending": payment_data.pending,
+                    "overdue": payment_data.overdue,
+                    "late_payments": payment_data.late_payments,
+                },
+            }
+        except HTTPException as http_e:
+            raise http_e
+
+        except Exception as e:
+            logger.error(f"[PROJECT_ANALYTICS] Error for User {user_id}: {str(e)}")
+            raise Exception(f"Failed to fetch analytics:")
+
+    async def update_project_status(
+        self, user_id: str, project_id: str, project_status: str
+    ):
+        try:
+            project = await self.db.get(BuildingProject, project_id)
+
+            if not project:
+                raise HTTPException(status_code=404, detail="Project not found")
+
+            is_super_admin = await self.perms_role.is_system_admin(user_id)
+            is_owner = str(project.owner_id) == user_id
+
+            if not (is_super_admin or is_owner):
+                raise HTTPException(status_code=403, detail="Permission denied")
+
+            project.status = project_status
+
+            await self.db.commit()
+            await self.db.refresh(project)
+
+            return {
+                "data": project,
+                "message": "Project status updated successfully",
+            }
+
+        except HTTPException:
+            await self.db.rollback()
+            raise
+        except Exception as e:
+            await self.db.rollback()  # IMPORTANT
+            logger.error(f"[PROJECT_UPDATE] Error for ID {project_id}: {str(e)}")
+            raise HTTPException(status_code=500, detail="Internal server error")

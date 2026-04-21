@@ -1,3 +1,4 @@
+import asyncio
 import string
 from time import time
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,9 +13,10 @@ from settings import get_settings
 from settings import Settings
 from typing import Any, Dict, Optional
 import httpx
-from models.plans import PaymentHistory,PlanPackageUsageCount
+import stripe as stripe_lib
+from models.plans import PaymentHistory, PlanPackageUsageCount
 from dateutil.relativedelta import relativedelta
-from sqlalchemy import select, func, exists, update,delete
+from sqlalchemy import select, func, exists, update, delete
 from helpers.payments import handle_success_payment, handle_failed_payment
 from services.email_service import get_email_service
 from helpers.constant import get_next_cycle_date
@@ -397,11 +399,99 @@ class PaystackServiceBaseAPIClient:
         )
 
 
+class StripeServiceBaseAPIClient:
+    """Handles Stripe API calls and webhook processing (used for Apple Pay)."""
+
+    def __init__(self, db: AsyncSession, settings: Optional[Settings] = None):
+        self.db = db
+        self.provider = "STRIPE"
+        stripe_lib.api_key = settings.stripe_secret_key
+        self.webhook_secret = settings.stripe_webhook_secret
+
+    async def initiate_payment(self, data: dict) -> dict:
+        """Create a Stripe PaymentIntent. Returns client_secret for the Flutter SDK."""
+        try:
+            intent = await asyncio.to_thread(
+                stripe_lib.PaymentIntent.create,
+                amount=int(float(data["amount"]) * 100),
+                currency=data.get("currency", "ngn").lower(),
+                automatic_payment_methods={"enabled": True},
+                # payment_method_types=["card"],  # covers Apple Pay tokenised as card
+                metadata={"invoice_id": data.get("invoice_id", "")},
+            )
+            return {
+                "client_secret": intent.client_secret,
+                "reference": intent.id,  # pi_xxx — stored as provider_reference
+                "authorization_url": None,
+            }
+        except stripe_lib.StripeError as e:
+            logger.error("[STRIPE] PaymentIntent creation failed: %s", e)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"status": False, "message": str(e), "provider": "STRIPE"},
+            )
+
+    def verify_webhook_signature(self, body_bytes: bytes, sig_header: str) -> dict:
+        """Verify the Stripe-Signature header and return the parsed event dict."""
+        try:
+            event = stripe_lib.Webhook.construct_event(
+                body_bytes, sig_header, self.webhook_secret
+            )
+            return dict(event)
+        except stripe_lib.errors.SignatureVerificationError as e:
+            logger.error("[STRIPE_WEBHOOK] Invalid signature: %s", e)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid Stripe webhook signature",
+            )
+
+    async def stripe_success_webhook(self, payment_intent: dict):
+        """Handle payment_intent.succeeded — update Transaction + Invoice + Project."""
+        intent_id = payment_intent.get("id")
+        tranx = await self.db.scalar(
+            select(Transaction).where(Transaction.provider_reference == intent_id)
+        )
+        if not tranx:
+            logger.warning(
+                "[STRIPE_WEBHOOK] No transaction found for PaymentIntent %s", intent_id
+            )
+            return
+
+        await handle_success_payment(
+            db=self.db,
+            payload={},
+            transaction=tranx,
+            provider_payload=payment_intent,
+        )
+
+    async def stripe_failed_webhook(self, payment_intent: dict):
+        """Handle payment_intent.payment_failed — mark Transaction + Invoice as failed."""
+        intent_id = payment_intent.get("id")
+        tranx = await self.db.scalar(
+            select(Transaction).where(Transaction.provider_reference == intent_id)
+        )
+        if not tranx:
+            logger.warning(
+                "[STRIPE_WEBHOOK] No transaction found for PaymentIntent %s", intent_id
+            )
+            return
+
+        await handle_failed_payment(
+            db=self.db,
+            payload={},
+            transaction=tranx,
+            provider_payload=payment_intent,
+        )
+
+
 class PaymentService:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
         self.paystack_base_client = PaystackServiceBaseAPIClient(
             settings=get_settings(), provider="PAYSTACK", db=db
+        )
+        self.stripe_base_client = StripeServiceBaseAPIClient(
+            settings=get_settings(), db=db
         )
 
     async def make_payment(self, provider: str, invoice_id: str, user_email: str):
@@ -430,8 +520,20 @@ class PaymentService:
                     paystack_payload
                 )
                 resp = resp.get("data")
+
+            elif provider == "STRIPE":
+                stripe_payload = {
+                    "amount": float(invoice.amount),
+                    "currency": str(invoice.currency).lower(),
+                    "invoice_id": invoice_id,
+                }
+                resp = await self.stripe_base_client.initiate_payment(stripe_payload)
+
             else:
-                pass
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Unsupported provider: {provider}",
+                )
 
             txn_ref = f"TXN-{int(time())}-{uuid.uuid4().hex[:8].upper()}"
             transaction_data = {
@@ -440,12 +542,12 @@ class PaymentService:
                 "reference": txn_ref,
                 "provider_reference": resp.get("reference"),
                 "amount": float(invoice.amount),
-                "currency": "NGN",
+                "currency": str(invoice.currency),
                 "project_id": str(invoice.project_id),
                 "provider": provider,
-                "provider_payload": resp,  # This is now a separate object, no circle!
-                "status": "PENDING",  # Good practice to ensure status is set
-                "payment_method": "card",
+                "provider_payload": resp,
+                "status": "PENDING",
+                "payment_method": "apple_pay" if provider == "STRIPE" else "card",
             }
             response = await self.log_transaction(transaction_data)
             return {
@@ -469,7 +571,6 @@ class PaymentService:
 
         return f"INV-{hash_val}"
 
- 
     async def generate_payment_invoice(
         self, project_id: str, plan_id: str, project: BuildingProject
     ):
@@ -513,10 +614,10 @@ class PaymentService:
                 plan.frequency,
                 1,
             )
-            project.payment_status = "Active"
+            project.payment_status = "Paid"
             project.plan_id = plan_id
 
-            #clear all usage:
+            # clear all usage:
             delete_stmt = delete(PlanPackageUsageCount).where(
                 PlanPackageUsageCount.project_id == project_id
             )
@@ -551,7 +652,7 @@ class PaymentService:
                 currency=plan.currency,
                 amount=plan.amount,
                 months=1,
-                status="Active" if plan.plan_status == "Free" else "Pending",
+                status="Paid" if plan.plan_status == "Free" else "Pending",
                 start_date=today,
                 next_billing_date=next_billing_date,
             )
@@ -565,7 +666,7 @@ class PaymentService:
 
             # If free plan, mark as success
             if plan.plan_status == "Free":
-                pending_history.status = "Active"
+                pending_history.status = "Paid"
 
             payment_history = pending_history
 
@@ -626,7 +727,6 @@ class PaymentService:
                         data.get("reference"),
                         data.get("amount"),
                     )
-
                     await self.paystack_base_client.paystack_success_webhook(data)
 
                 elif event == "charge.failed":
@@ -635,12 +735,44 @@ class PaymentService:
                         data.get("reference"),
                         data.get("gateway_response"),
                     )
-
                     await self.paystack_base_client.paystack_failed_webhook(data)
+
                 else:
                     logger.warning(
                         "[PAYSTACK_WEBHOOK] Unhandled event type | Event=%s",
                         event,
+                    )
+
+            elif provider == "STRIPE":
+                event_type: str = payload.get("type", "")
+                payment_intent: dict = payload.get("data", {}).get("object", {})
+
+                logger.info(
+                    "[STRIPE_WEBHOOK] Event received | Type=%s | IntentID=%s",
+                    event_type,
+                    payment_intent.get("id"),
+                )
+
+                if event_type == "payment_intent.succeeded":
+                    logger.info(
+                        "[STRIPE_WEBHOOK] Processing SUCCESS | IntentID=%s | Amount=%s",
+                        payment_intent.get("id"),
+                        payment_intent.get("amount"),
+                    )
+                    await self.stripe_base_client.stripe_success_webhook(payment_intent)
+
+                elif event_type == "payment_intent.payment_failed":
+                    logger.warning(
+                        "[STRIPE_WEBHOOK] Processing FAILED | IntentID=%s | Reason=%s",
+                        payment_intent.get("id"),
+                        payment_intent.get("last_payment_error", {}).get("message"),
+                    )
+                    await self.stripe_base_client.stripe_failed_webhook(payment_intent)
+
+                else:
+                    logger.info(
+                        "[STRIPE_WEBHOOK] Unhandled event type | Type=%s",
+                        event_type,
                     )
 
             else:

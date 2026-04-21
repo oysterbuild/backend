@@ -142,34 +142,26 @@ class PermissionService:
         except Exception as e:
             raise e
 
+    async def is_inspector(self, user_id: UUID):
+        try:
+            user = await self.db.get(User, user_id)
+            if user_id and user.role == "INSPECTOR":
+                return True
+            return False
+        except Exception as e:
+            raise e
+
     # super admin:
-    async def has_project_permission(
-        self,
-        user_id: str,
-        project_id: str,
-        permission_name: str,
-    ):
+    async def has_project_permission(self, user_id: str):
         try:
             # 1. System user → allow
             if await self.is_system_admin(user_id):
                 return True
 
-            # 2. Find project membership
-            stmt = (
-                select(Permission.id)
-                .join(RolePermission, Permission.id == RolePermission.permission_id)
-                .join(Role, Role.id == RolePermission.role_id)
-                .join(ProjectMember, ProjectMember.role_id == Role.id)
-                .where(
-                    ProjectMember.user_id == user_id,
-                    ProjectMember.project_id == project_id,
-                    ProjectMember.is_active.is_(True),
-                    Permission.name == permission_name,
-                )
-            )
+            if await self.is_inspector(user_id):
+                return True
 
-            result = await self.db.execute(stmt)
-            return result.first() is not None
+            return False
         except Exception as e:
             raise e
 

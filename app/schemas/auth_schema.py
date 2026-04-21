@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field, model_validator
-from typing import Optional, Any, Literal
+from typing import Optional, Any, Literal, List
 from uuid import UUID
 from datetime import datetime
 
@@ -21,8 +21,11 @@ class SignupRequest(BaseModel):
     first_name: str = Field(..., min_length=1, max_length=225)
     last_name: str = Field(..., min_length=1, max_length=225)
     email: EmailStr
-    phone_number: str = Field(..., min_length=7, max_length=15)
+    phone_number: Optional[str] = Field(None, min_length=7, max_length=15)
     password: str = Field(..., min_length=8)
+    role: Optional[Literal["USER", "INSPECTOR", "SUPER_ADMIN"]] = Field(
+        default="USER", description="the register user role"
+    )
 
     class Config:
         json_schema_extra = {
@@ -32,6 +35,7 @@ class SignupRequest(BaseModel):
                 "email": "ayo@example.com",
                 "phone_number": "+2348100000000",
                 "password": "StrongPassword123",
+                "role": "INSPECTOR OR USER",
             }
         }
 
@@ -101,6 +105,7 @@ class UserResponse(BaseModel):
     phone_number: Optional[str] = None
     is_email_verified: bool
     image_url: Optional[str] = None
+    role: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -132,3 +137,8 @@ class ErrorResponse(BaseModel):
 class SendOTPRequest(BaseModel):
     email: EmailStr
     email_type: Literal["sign_up", "forgot_password", "reset_password"]
+
+
+class AllInspectorsSchema(BaseModel):
+    data: list[UserResponse]
+    message: str

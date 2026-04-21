@@ -262,7 +262,9 @@ async def delete_project(
 async def projects(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
-    project_status: Optional[Literal["Active","Pending","Draft"]] = Query(None, description="Filter by project status"),
+    project_status: Optional[Literal["Active", "Pending", "Draft"]] = Query(
+        None, description="Filter by project status"
+    ),
     project_service: "ProjectSetupService" = Depends(get_project_service),
     current_user: dict = Depends(get_current_user),
 ):
@@ -339,53 +341,18 @@ async def get_project_report(
 async def create_report(
     project_id: str,
     report_data: ProjectReportRequest,
-    # str = Form(
-    #     ...,
-    #     description="JSON payload for report data",
-    #     json_schema_extra={
-    #         "title": "Foundation Work Progress Report",
-    #         "report_type": "Technical",
-    #         "report_date": "2026-02-10",
-    #         "description": "Foundation excavation and concrete pouring have been completed. Structural integrity tests passed and curing is ongoing.",
-    #         "progress_percent": 35.5,
-    #         "recommendation": "Lagos, Nigeria",
-    #         "approval_required": True,
-    #         "approved": False,
-    #     },
-    #     # ),
-    # ),
-    # images: List[UploadFile] = File([]),
     project_service: ProjectSetupService = Depends(get_project_service),
     current_user: dict = Depends(get_current_user),
 ):
     logger.info(f"User {current_user.get('id')} started creating a project")
 
     try:
-        # Parse JSON
-        # try:
-        #     data = json.loads(report_data)
-        #     logger.info("Project payload parsed successfully")
-
-        #     if "report_date" in data:
-        #         data["report_date"] = datetime.fromisoformat(data["report_date"]).date()
-
-        #     if data["approval_required"]:
-        #         data["approved"] = True
-
-        #     project = ProjectReportRequest(**data)
-        # except Exception as e:
-        #     logger.error(f"JSON parsing failed: {e}")
-        #     raise HTTPException(
-        #         status_code=status.HTTP_400_BAD_REQUEST,
-        #         detail=f"Invalid Payload -> {e}",
-        #     )
-
         # # Combine project data with uploaded image URLs
         report_data = report_data.dict()
         # project_dict["images"] = images
 
-        if report_data["approval_required"]:
-            report_data["approved"] = True
+        # if report_data["approval_required"]:
+        #     report_data["approved"] = True
 
         created_project = await project_service.create_project_report(
             report_data, project_id, current_user
@@ -412,30 +379,6 @@ async def update_report(
     project_id: str,
     report_id: str,
     report_data: UpdateProjectReportRequest,
-    # str = Form(
-    #     ...,
-    #     description="JSON payload for report data",
-    #     json_schema_extra={
-    #         "title": "Weekly Site Progress Report",
-    #         "report_type": "Milestone Completion",
-    #         "report_date": "2026-01-27",
-    #         "description": "Foundation work has been completed. Column casting is in progress.",
-    #         "progress_percent": 85.5,
-    #         "recommendation": [
-    #             "Increase workforce to meet deadline",
-    #             "Approve additional cement supply",
-    #             "Schedule structural inspection",
-    #         ],
-    #         "approval_required": True,
-    #         "approved": False,
-    #         "existing_image_ids": [
-    #             "bec167e4-d81d-4458-bb10-ab485b4986aa",
-    #             "cd657a65-38be-48b0-96af-dcd640e24d0c",
-    #         ],
-    #     },
-    #     # ),
-    # ),
-    # images: List[UploadFile] = File([]),
     project_service: ProjectSetupService = Depends(get_project_service),
     current_user: dict = Depends(get_current_user),
 ):
@@ -468,8 +411,8 @@ async def update_report(
         # report_dict["images"] = images
         images = report_dict.pop("images")
 
-        if report_dict["approval_required"]:
-            report_dict["approved"] = True
+        # if report_dict["approval_required"]:
+        #     report_dict["approved"] = True
 
         created_project = await project_service.updates_project_report(
             project_id, report_id, user_id, report_dict, images, current_user
@@ -562,6 +505,32 @@ async def generate_presigned_url(
         )
 
 
+# Admin As Assess
+@router.put("{project_id}/reports/{report_id}/change-status")
+async def update_report_status(
+    project_id: str,
+    report_id: str,
+    project_service: ProjectSetupService = Depends(get_project_service),
+    current_user: dict = Depends(get_current_user),
+):
+    try:
+        user_id = str(current_user.get("user_id"))
+        response = await project_service.update_project_report_status(
+            user_id=user_id, report_id=report_id
+        )
+        return response
+
+    except HTTPException as e:
+        logger.error(f"HTTP Exception: {e.detail}")
+        raise e
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Something went wrong: {e}",
+        )
+
+
 # ----------------PROJECT PAYMENT -----------------
 @router.get(
     "/{project_id}/payment/history", description="This shows the list of all payments"
@@ -575,7 +544,9 @@ async def get_subscriptions(
 ):
     try:
         user_id = str(current_user.get("id"))
-        response = await project_service.payments_history(project_id, user_id,page,limit)
+        response = await project_service.payments_history(
+            project_id, user_id, page, limit
+        )
         # Get all subscription payments:
         return response
     except HTTPException as e:

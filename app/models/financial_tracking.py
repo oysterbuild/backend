@@ -36,7 +36,8 @@ class ProjectPayment(BaseModel):
     amount = Column(DECIMAL(20, 2), nullable=False, default=0.00)
     currency = Column(String(3), nullable=False, default="NGN")  # NGN or USD
     status = Column(
-        Enum(PaymentStatus, name="payment_status_emum"), default=PaymentStatus.PENDING
+        Enum(PaymentStatus, name="payment_status_emum"),
+        default=PaymentStatus.AWAITING_PAYMENT,
     )
     notes = Column(Text, nullable=True)
     paid_at = Column(DateTime(timezone=True), nullable=True)
