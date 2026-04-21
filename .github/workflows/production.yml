@@ -127,6 +127,11 @@ jobs:
             docker compose up -d --no-deps --build celery-beat
             echo "✅ Celery beat restarted"
 
+            # ── 9. Ensure Caddy is running ────────────────────────────────
+            echo "▶ Starting caddy..."
+            docker compose up -d --no-deps caddy
+            echo "✅ Caddy running"
+
             # ── 9. Cleanup ─────────────────────────────────────────────────
             docker image prune -f
             echo "✅ Deployment complete!"
