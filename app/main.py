@@ -49,13 +49,15 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down Oysterbuild API...")
 
 
+_is_production = settings.environment.lower() == "production"
+
 app = FastAPI(
     title=settings.app_name,
     description="API for Oysterbuild",
     version="1.0.0",
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url=None if _is_production else "/docs",
+    redoc_url=None if _is_production else "/redoc",
 )
 
 # Restrict which hosts can hit your API at all
@@ -65,9 +67,7 @@ app.add_middleware(
         "oysterbuild.pm",
         "localhost",
         "app",
-        "6e67-197-211-59-196.ngrok-free.app",
         "periscopebyoysterbuild.com",
-        "4fdd-197-211-59-110.ngrok-free.app",
     ],
 )
 
