@@ -1,26 +1,39 @@
 {% extends "base_email.html" %}
 
 {% block content %}
-    <p>Hi {{ user_name }},</p>
-    <p>Success! Your subscription to the <strong>{{ plan_name }}</strong> plan has been activated. You now have full access to all our premium features.</p>
-    
-    <div class="receipt-table">
-        <table width="100%">
-            <tr>
-                <td><strong>Amount Paid:</strong></td>
-                <td class="text-right">{{ currency }} {{ amount }}</td>
-            </tr>
-            <tr>
-                <td><strong>Next Billing Date:</strong></td>
-                <td class="text-right">{{ next_billing_date }}</td>
-            </tr>
-            <tr>
-                <td><strong>Transaction Ref:</strong></td>
-                <td class="text-right">{{ reference }}</td>
-            </tr>
-        </table>
-    </div>
+    <!-- Success header -->
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 20px 0;">
+        <tr>
+            <td style="border-left:4px solid #10B981;padding-left:14px;">
+                <h1 style="margin:0;font-size:22px;font-weight:700;color:#1E293B;">Subscription Updated</h1>
+            </td>
+        </tr>
+    </table>
 
-    <p>If you have any questions, just reply to this email. We're here to help!</p>
-    <p>Best,<br>The Oysterbuild Team</p>
+    <p style="margin:0 0 8px 0;font-size:15px;color:#64748B;line-height:1.6;">Hi {{ user_name }},</p>
+    <p style="margin:0 0 24px 0;font-size:15px;color:#64748B;line-height:1.6;">
+        Your subscription has been updated to the <strong style="color:#1E293B;">{{ plan_name }}</strong> plan.
+        You now have full access to all features included in your plan.
+    </p>
+
+    <!-- Receipt table -->
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px 0;border:1px solid #E2E8F0;border-radius:12px;overflow:hidden;">
+        <tr style="background-color:#F8FAFC;">
+            <td style="padding:12px 16px;font-size:14px;font-weight:600;color:#1E293B;border-bottom:1px solid #E2E8F0;">Amount Paid</td>
+            <td style="padding:12px 16px;font-size:14px;font-weight:700;color:#10B981;border-bottom:1px solid #E2E8F0;text-align:right;">{{ currency }} {{ amount }}</td>
+        </tr>
+        <tr>
+            <td style="padding:12px 16px;font-size:14px;font-weight:600;color:#1E293B;border-bottom:1px solid #E2E8F0;">Next Billing Date</td>
+            <td style="padding:12px 16px;font-size:14px;color:#64748B;border-bottom:1px solid #E2E8F0;text-align:right;">{{ next_billing_date }}</td>
+        </tr>
+        <tr style="background-color:#F8FAFC;">
+            <td style="padding:12px 16px;font-size:14px;font-weight:600;color:#1E293B;">Transaction Ref</td>
+            <td style="padding:12px 16px;font-size:14px;color:#64748B;text-align:right;font-family:'Courier New',Courier,monospace;">{{ reference }}</td>
+        </tr>
+    </table>
+
+    <p style="margin:0 0 8px 0;font-size:14px;color:#64748B;line-height:1.6;">
+        If you have any questions, just reply to this email. We're here to help!
+    </p>
+    <p style="margin:0;font-size:14px;color:#94A3B8;line-height:1.6;">Best,<br>The OPMS Team</p>
 {% endblock %}

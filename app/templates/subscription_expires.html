@@ -1,42 +1,40 @@
 {% extends "base_email.html" %}
 
 {% block content %}
-    <p>Hi {{ user_name }},</p>
-
-    <p>
-        Just a quick reminder that your 
-        <strong>{{ plan_name }}</strong> plan for the project 
-        <strong>{{ project_name }}</strong> 
-        will expire in <strong>{{ days_left }} day{{ "s" if days_left > 1 else "" }}</strong>.
+    <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:#1E293B;">Your subscription is expiring soon</h1>
+    <p style="margin:0 0 8px 0;font-size:15px;color:#64748B;line-height:1.6;">Hi {{ user_name }},</p>
+    <p style="margin:0 0 24px 0;font-size:15px;color:#64748B;line-height:1.6;">
+        This is a reminder that your <strong style="color:#1E293B;">{{ plan_name }}</strong> plan for the project
+        <strong style="color:#1E293B;">{{ project_name }}</strong> will expire in
+        <strong style="color:#F59E0B;">{{ days_left }} day{{ "s" if days_left > 1 else "" }}</strong>.
     </p>
 
-    <div class="receipt-table">
-        <table width="100%">
-            <tr>
-                <td><strong>Plan Name:</strong></td>
-                <td class="text-right">{{ plan_name }}</td>
-            </tr>
-            <tr>
-                <td><strong>Project:</strong></td>
-                <td class="text-right">{{ project_name }}</td>
-            </tr>
-            <tr>
-                <td><strong>Expiration Date:</strong></td>
-                <td class="text-right">{{ expiration_date }}</td>
-            </tr>
-            <tr>
-                <td><strong>Days Remaining:</strong></td>
-                <td class="text-right">{{ days_left }}</td>
-            </tr>
-        </table>
-    </div>
+    <!-- Details table -->
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px 0;border:1px solid #E2E8F0;border-radius:12px;overflow:hidden;">
+        <tr style="background-color:#F8FAFC;">
+            <td style="padding:12px 16px;font-size:14px;font-weight:600;color:#1E293B;border-bottom:1px solid #E2E8F0;">Plan Name</td>
+            <td style="padding:12px 16px;font-size:14px;color:#64748B;border-bottom:1px solid #E2E8F0;text-align:right;">{{ plan_name }}</td>
+        </tr>
+        <tr>
+            <td style="padding:12px 16px;font-size:14px;font-weight:600;color:#1E293B;border-bottom:1px solid #E2E8F0;">Project</td>
+            <td style="padding:12px 16px;font-size:14px;color:#64748B;border-bottom:1px solid #E2E8F0;text-align:right;">{{ project_name }}</td>
+        </tr>
+        <tr style="background-color:#F8FAFC;">
+            <td style="padding:12px 16px;font-size:14px;font-weight:600;color:#1E293B;border-bottom:1px solid #E2E8F0;">Expiration Date</td>
+            <td style="padding:12px 16px;font-size:14px;color:#64748B;border-bottom:1px solid #E2E8F0;text-align:right;">{{ expiration_date }}</td>
+        </tr>
+        <tr>
+            <td style="padding:12px 16px;font-size:14px;font-weight:600;color:#1E293B;">Days Remaining</td>
+            <td style="padding:12px 16px;font-size:14px;font-weight:700;color:#F59E0B;text-align:right;">{{ days_left }}</td>
+        </tr>
+    </table>
 
-    <p>
-        To avoid interruption of service and maintain access to premium features, 
+    <p style="margin:0 0 8px 0;font-size:14px;color:#64748B;line-height:1.6;">
+        To avoid any interruption to your service and maintain access to premium features,
         please renew your subscription before it expires.
     </p>
-
-    <p>If you have any questions, just reply to this email. We're here to help!</p>
-
-    <p>Best,<br>The Oysterbuild Team</p>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#64748B;line-height:1.6;">
+        If you have any questions, just reply to this email. We're here to help!
+    </p>
+    <p style="margin:0;font-size:14px;color:#94A3B8;line-height:1.6;">Best,<br>The OPMS Team</p>
 {% endblock %}
