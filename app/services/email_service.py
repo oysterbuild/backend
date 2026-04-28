@@ -1,11 +1,11 @@
 import os
+import asyncio
 from pathlib import Path
-from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
 from jinja2 import Environment, FileSystemLoader
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
 from settings import get_settings
-from fastapi import Request
 
-# Get the path to the templates folder
 BASE_DIR = Path(__file__).resolve().parent.parent
 template_env = Environment(
     loader=FileSystemLoader(os.path.join(BASE_DIR, "templates/"))
@@ -18,19 +18,6 @@ EMAIL_LOGO = "https://res.cloudinary.com/dxzjdyf5z/image/upload/v1769970393/vogy
 
 class EmailService:
 
-    def __init__(self):
-        # Configuration for SMTP
-        self.conf = ConnectionConfig(
-            MAIL_USERNAME=settings.email_host_user,
-            MAIL_PASSWORD=settings.email_host_password,
-            MAIL_FROM=settings.email_host_user,
-            MAIL_PORT=587,
-            MAIL_SERVER="smtp.gmail.com",
-            MAIL_STARTTLS=True,
-            MAIL_SSL_TLS=False,
-            USE_CREDENTIALS=True,
-        )
-
     async def send_emails(
         self,
         subject: str,
@@ -42,17 +29,18 @@ class EmailService:
         context["logo_url"] = EMAIL_LOGO
         html_content = template.render(**context)
 
-        # 2. Create the message
-        message = MessageSchema(
+        message = Mail(
+            from_email=settings.sendgrid_from_email,
+            to_emails=recipient,
             subject=subject,
-            recipients=recipient,
-            body=html_content,
-            subtype=MessageType.html,
+            html_content=html_content,
         )
 
-        # 3. Send via FastMail
-        fm = FastMail(self.conf)
-        await fm.send_message(message)
+        def _send():
+            sg = SendGridAPIClient(settings.sendgrid_api_key)
+            sg.send(message)
+
+        await asyncio.to_thread(_send)
 
 
 def get_email_service() -> EmailService:

@@ -1,8 +1,7 @@
 services:
   app:
     build: .
-    # command: uvicorn main:app --host 0.0.0.0 --port 8000 --workers 2
-    command: gunicorn main:app -k uvicorn.workers.UvicornWorker --workers 2 --bind 0.0.0.0:8000
+    command: gunicorn main:app -k uvicorn.workers.UvicornWorker --workers 4 --bind 0.0.0.0:8000 --timeout 120 --graceful-timeout 30 --keep-alive 5
     restart: unless-stopped
     expose:
       - "8000"
@@ -10,21 +9,21 @@ services:
       - .env
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
-      interval: 30s       # reduced from 10s — less log noise, still catches failures
+      interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 15s
+      start_period: 20s
     depends_on:
       redis:
         condition: service_healthy
     deploy:
       resources:
         limits:
-          cpus: "1.0"
-          memory: 768M    # bumped — 512M is tight with 2 workers
+          cpus: "1.5"
+          memory: 1536M
         reservations:
-          cpus: "0.5"
-          memory: 384M
+          cpus: "0.75"
+          memory: 768M
     logging:
       driver: "json-file"
       options:
@@ -36,7 +35,7 @@ services:
     build: .
     command: >
       celery -A worker.celery_worker.celery worker
-      --loglevel=info --concurrency 2
+      --loglevel=info --concurrency 4
     env_file:
       - .env
     depends_on:
@@ -51,11 +50,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.75"
-          memory: 512M
+          cpus: "1.0"
+          memory: 768M
         reservations:
-          cpus: "0.25"
-          memory: 128M
+          cpus: "0.50"
+          memory: 256M
     logging:
       driver: "json-file"
       options:
@@ -79,7 +78,7 @@ services:
           cpus: "0.25"
           memory: 128M
         reservations:
-          cpus: "0.05"
+          cpus: "0.10"
           memory: 64M
     logging:
       driver: "json-file"
@@ -90,7 +89,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: redis
-    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru --appendonly yes
+    command: redis-server --maxmemory 1gb --maxmemory-policy allkeys-lru --appendonly yes
     restart: unless-stopped
     volumes:
       - redis_data:/data
@@ -104,10 +103,10 @@ services:
       resources:
         limits:
           cpus: "0.25"
-          memory: 600M
+          memory: 1152M
         reservations:
-          cpus: "0.05"
-          memory: 64M
+          cpus: "0.10"
+          memory: 128M
     logging:
       driver: "json-file"
       options:
@@ -131,7 +130,7 @@ services:
           cpus: "0.25"
           memory: 128M
         reservations:
-          cpus: "0.05"
+          cpus: "0.10"
           memory: 32M
     logging:
       driver: "json-file"
