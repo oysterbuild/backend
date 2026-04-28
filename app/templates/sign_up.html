@@ -1,13 +1,26 @@
 {% extends "base_email.html" %}
 
 {% block content %}
-    <h1>Verify your email</h1>
-    <p>Hi,</p>
-    <p>Thank you for joining OPMS. To complete your registration and start managing your projects, please use the verification code below:</p>
-    
-    <div style="background-color: #F1F5F9; border-radius: 12px; padding: 20px; text-align: center; margin: 25px 0;">
-        <span style="font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #10B981;">{{ otp_code }}</span>
-    </div>
+    <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:#1E293B;">Verify your email</h1>
+    <p style="margin:0 0 8px 0;font-size:15px;color:#64748B;line-height:1.6;">Hi,</p>
+    <p style="margin:0 0 24px 0;font-size:15px;color:#64748B;line-height:1.6;">
+        Thank you for joining OPMS. To complete your registration and start managing your projects,
+        please use the verification code below:
+    </p>
 
-    <p>This code will expire in 10 minutes. If you did not create an account, you can safely ignore this email.</p>
+    <!-- OTP Box -->
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px 0;">
+        <tr>
+            <td align="center" style="background-color:#F0FDF4;border:1px solid #BBF7D0;border-radius:12px;padding:28px 20px;">
+                <span style="font-size:38px;font-weight:800;color:#10B981;letter-spacing:6px;font-family:'Courier New',Courier,monospace;">{{ otp_code }}</span>
+            </td>
+        </tr>
+    </table>
+
+    <p style="margin:0 0 8px 0;font-size:14px;color:#64748B;line-height:1.6;">
+        This code will expire in <strong style="color:#1E293B;">10 minutes</strong>.
+    </p>
+    <p style="margin:0;font-size:14px;color:#94A3B8;line-height:1.6;">
+        If you did not create an account, you can safely ignore this email.
+    </p>
 {% endblock %}
