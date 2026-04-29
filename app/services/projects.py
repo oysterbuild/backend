@@ -186,6 +186,15 @@ class ProjectSetupService:
                 project_dict["images"] = project_image_map.get(project.id, [])
                 data.append(project_dict)
 
+            # Get all the plans without fiters
+            plans = await self.db.execute(select(Plan))
+            plans = plans.scalars().all()
+            plan_map = {plan.id: plan for plan in plans}
+
+            # add the plan details to the project as an map
+            for project in data:
+                project["plan"] = plan_map.get(project["plan_id"])
+
             return {
                 "meta_data": {"limit": limit, "page": page, "total": total},
                 "data": data,
