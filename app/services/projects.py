@@ -195,6 +195,26 @@ class ProjectSetupService:
             for project in data:
                 project["plan"] = plan_map.get(project["plan_id"])
 
+            # add report count
+            report_count_stmt = (
+                select(
+                    ProjectReport.project_id,
+                    func.count(ProjectReport.id).label("report_count"),
+                )
+                .where(ProjectReport.project_id.in_(project_ids))
+                .group_by(ProjectReport.project_id)
+            )
+
+            report_count_result = await self.db.execute(report_count_stmt)
+            report_count_map = {
+                row.project_id: row.report_count
+                for row in report_count_result.scalars().all()
+            }
+
+            # Attach report count to each project
+            for project in data:
+                project["report_count"] = report_count_map.get(project["id"], 0)
+
             return {
                 "meta_data": {"limit": limit, "page": page, "total": total},
                 "data": data,
