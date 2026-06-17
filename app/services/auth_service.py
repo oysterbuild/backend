@@ -198,7 +198,14 @@ class AuthService:
             )
             verification = result.scalar_one_or_none()
 
-            if not verification or verification.is_expired():
+            if not verification:
+                logger.error("Email or Otp Doesnt Exist")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Email or Otp Doesn't Match",
+                )
+
+            if verification.is_expired():
                 logger.warning("Invalid/expired OTP | %s", email)
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
