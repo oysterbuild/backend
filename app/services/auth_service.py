@@ -239,9 +239,10 @@ class AuthService:
                 minutes=self.OTP_EXPIRY_MINUTES
             )
 
+            normal_email = email_nomalizers(email)
             existing = await self.db.scalar(
                 select(EmailVerificationCodes).where(
-                    EmailVerificationCodes.email == email
+                    EmailVerificationCodes.email == normal_email
                 )
             )
 
@@ -250,7 +251,7 @@ class AuthService:
 
             self.db.add(
                 EmailVerificationCodes(
-                    email=email,
+                    email=normal_email,
                     otp_code=otp,
                     expires_at=expires_at,
                 )
@@ -262,7 +263,7 @@ class AuthService:
             subject = email_types.get("subject")
             template = email_types.get("templates")
             context = {"otp_code": otp}
-            recepient_email = [email]
+            recepient_email = [normal_email]
 
             background_task.add_task(
                 self.email_service.send_emails,
@@ -272,11 +273,11 @@ class AuthService:
                 context,
             )
 
-            logger.info("OTP sent successfully | email=%s", email)
+            logger.info("OTP sent successfully | email=%s", normal_email)
 
             return {"message": "Email Otp Sent Succesfully"}
         except Exception:
-            logger.exception("OTP send failed | email=%s", email)
+            logger.exception("OTP send failed | email=%s", normal_email)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Unable to send OTP",
