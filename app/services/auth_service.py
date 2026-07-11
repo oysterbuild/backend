@@ -386,7 +386,7 @@ class AuthService:
             limit = min(limit, 20)
             offset = (page - 1) * limit
 
-            base_stmt = select(User).where(User.id != user_id)
+            base_stmt = select(User)
 
             count_stmt = select(func.count()).select_from(base_stmt.subquery())
             total_result = await self.db.execute(count_stmt)
