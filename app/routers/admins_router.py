@@ -181,8 +181,8 @@ async def get_all_users(
         )
 
 
-@router.get("/create-project")
-async def get_all_users(
+@router.post("/create-project")
+async def admin_create_project(
     project_data: str = Form(
         ...,
         description="JSON payload for project data",
