@@ -181,7 +181,7 @@ async def get_all_users(
         )
 
 
-@router.get("/create-project")
+@router.post("/create-project")
 async def get_all_users(
     project_data: str = Form(
         ...,
