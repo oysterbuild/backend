@@ -772,7 +772,7 @@ class ProjectSetupService:
                 f"[PAYMENTS] Fetching history for Project: {project_id} by User: {user_id}"
             )
             page = max(page, 1)
-            limit = min(limit, 100)
+            limit = min(limit, 20)
             offset = (page - 1) * limit
 
             # Permission Check
@@ -1469,3 +1469,165 @@ class ProjectSetupService:
             await self.db.rollback()  # IMPORTANT
             logger.error(f"[PROJECT_UPDATE] Error for ID {project_id}: {str(e)}")
             raise HTTPException(status_code=500, detail="Internal server error")
+
+    async def admin_create_project(self, project_payload: dict, current_user: dict):
+        """Initializes a new project, assigns ownership, handles media, and generates an invoice."""
+        user_id = current_user.get("id")
+        try:
+            logger.info(f"[PROJECT_CREATE] Start: User {user_id} creating new project")
+
+            # check making sure only admin can create it
+            if await self.perms_role.is_system_admin(user_id):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Permission Denied. Super Admin Permission is Required",
+                )
+            # 1. Extract and Clean Data
+            images = project_payload.pop("images", [])
+            project_payload["owner_id"] = str(
+                project_payload.pop("assignee_user_id") or user_id
+            )  # the owner will be the selected customer
+
+            # Enum to String Conversion
+            for key in ["preferred_inspection_days", "preferred_inspection_window"]:
+                if key in project_payload:
+                    val = project_payload[key]
+                    project_payload[key] = (
+                        [d.value if hasattr(d, "value") else str(d) for d in val]
+                        if isinstance(val, list)
+                        else (val.value if hasattr(val, "value") else str(val))
+                    )
+
+            plan_id = str(project_payload.pop("plan_id"))
+
+            # 2. Create Project Instance
+            project = BuildingProject(**project_payload)
+            self.db.add(project)
+            await self.db.flush()
+            await self.db.refresh(project)
+            logger.info(f"[PROJECT_CREATE] Base record created: ID {project.id}")
+
+            # 4. Handle Media
+            if images:
+                logger.info(
+                    f"[PROJECT_CREATE] Uploading {len(images)} images for Project {project.id}"
+                )
+                await self.media_upload.upload_project_media(
+                    project_id=project.id, images=images
+                )
+
+            # 5. Generate Payment Invoice
+            invoice_resp = await self.payment_service.generate_payment_invoice(
+                project.id, plan_id, project
+            )
+
+            await self.db.commit()
+            await self.db.refresh(project)
+
+            project_resp = ProjectResponse.model_validate(project).model_dump()
+            project_resp["invoice_id"] = invoice_resp.invoice_id
+
+            logger.info(
+                f"[PROJECT_CREATE] Success: Project {project.id} is fully setup"
+            )
+            return project_resp
+
+        except HTTPException as http_exec:
+            await self.db.rollback()  # IMPORTANT
+            raise http_exec
+
+        except Exception as e:
+            await self.db.rollback()
+            logger.error(f"[PROJECT_CREATE] Critical Failure: {str(e)}", exc_info=True)
+            raise Exception(f"Failed to create project: {str(e)}")
+
+    async def admin_update_project(
+        self,
+        user_id: str,
+        project_id: str,
+        project_dto: dict,
+        images: list,
+        current_user: dict = {},
+    ):
+        """Updates project details, handles image uploads, and manages existing media."""
+        try:
+            logger.info(
+                f"[PROJECT_UPDATE] Start: User {user_id} updating Project {project_id}"
+            )
+
+            # check making sure only admin can create it
+            if await self.perms_role.is_system_admin(user_id):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Permission Denied. Super Admin Permission is Required",
+                )
+
+            # 2. Fetch and Verify Ownership
+            project_stmt = await self.db.get(BuildingProject, project_id)
+            if not project_stmt:
+                logger.warning(f"[PROJECT_UPDATE] Not Found: Project {project_id}")
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
+                )
+
+            # 3. Process Payload
+            existing_image_ids = project_dto.pop("existing_image_ids", [])
+            project_stmt.owner_id = (
+                project_dto.pop("assignee_user_id") or project_stmt.owner_id
+            )
+            project_dict = project_dto.copy()
+
+            # Clean Enums (Days and Windows)
+            if "preferred_inspection_days" in project_dict:
+                project_dict["preferred_inspection_days"] = [
+                    day.value if hasattr(day, "value") else str(day)
+                    for day in project_dict["preferred_inspection_days"]
+                ]
+
+            if "preferred_inspection_window" in project_dict:
+                val = project_dict["preferred_inspection_window"]
+                project_dict["preferred_inspection_window"] = (
+                    val.value if hasattr(val, "value") else str(val)
+                )
+
+            # Apply updates to model
+            for key, value in project_dict.items():
+                setattr(project_stmt, key, value)
+
+            await self.db.flush()
+
+            # 4. Handle New Media Uploads
+            new_images = []
+            if images:
+                logger.info(
+                    f"[PROJECT_UPDATE] Uploading {len(images)} new images for Project {project_id}"
+                )
+                new_images = await asyncio.gather(
+                    *(
+                        upload_file_optimized(
+                            img, "project_image", user_id, current_user, "PROJECT"
+                        )
+                        for img in images
+                    )
+                )
+
+            # Sync media (Remove old, add new)
+            await self.media_upload.update_uploaded_project_media(
+                project_id, existing_image_ids, new_images
+            )
+
+            await self.db.commit()
+            await self.db.refresh(project_stmt)
+
+            logger.info(
+                f"[PROJECT_UPDATE] Success: Project {project_id} updated successfully"
+            )
+            return project_stmt
+
+        except HTTPException as http_exc:
+            await self.db.rollback()
+            raise http_exc
+        except Exception as e:
+            await self.db.rollback()
+            logger.error(f"[PROJECT_UPDATE] Critical Error: {str(e)}", exc_info=True)
+            raise Exception(f"An error occurred while updating the project: {str(e)}")
