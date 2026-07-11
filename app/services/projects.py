@@ -1477,7 +1477,7 @@ class ProjectSetupService:
             logger.info(f"[PROJECT_CREATE] Start: User {user_id} creating new project")
 
             # check making sure only admin can create it
-            if await self.perms_role.is_system_admin(user_id):
+            if not await self.perms_role.is_system_admin(user_id):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Permission Denied. Super Admin Permission is Required",
@@ -1556,7 +1556,7 @@ class ProjectSetupService:
             )
 
             # check making sure only admin can create it
-            if await self.perms_role.is_system_admin(user_id):
+            if not await self.perms_role.is_system_admin(user_id):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Permission Denied. Super Admin Permission is Required",
