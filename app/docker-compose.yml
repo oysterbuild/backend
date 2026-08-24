@@ -1,7 +1,7 @@
 services:
   app:
     build: .
-    command: gunicorn main:app -k uvicorn.workers.UvicornWorker --workers 4 --bind 0.0.0.0:8000 --timeout 120 --graceful-timeout 30 --keep-alive 5
+    command: gunicorn main:app -k uvicorn.workers.UvicornWorker --workers 2 --bind 0.0.0.0:8000 --timeout 120 --graceful-timeout 30 --keep-alive 5
     restart: unless-stopped
     expose:
       - "8000"
