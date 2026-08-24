@@ -25,7 +25,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-
       - name: Run basic app smoke test
         working-directory: app
         run: |
@@ -55,13 +54,17 @@ jobs:
           script: |
             set -e
 
-            # ── 1. Install docker-rollout if missing ──────────────────────
-            mkdir -p ~/.docker/cli-plugins
-            if [ ! -f ~/.docker/cli-plugins/docker-rollout ]; then
-              curl -fsSL https://raw.githubusercontent.com/wowu/docker-rollout/main/docker-rollout \
-                -o ~/.docker/cli-plugins/docker-rollout
-              chmod +x ~/.docker/cli-plugins/docker-rollout
-            fi
+            # ── 1. docker-rollout plugin (DISABLED for low-RAM VPS) ─────
+            # docker-rollout briefly runs two app containers simultaneously.
+            # On 1 CPU / 2 GB (or similar small VPSes) this causes OOM kills.
+            # Re-enable only after upgrading to at least 2 CPU / 4 GB RAM.
+            #
+            # mkdir -p ~/.docker/cli-plugins
+            # if [ ! -f ~/.docker/cli-plugins/docker-rollout ]; then
+            #   curl -fsSL https://raw.githubusercontent.com/wowu/docker-rollout/main/docker-rollout \
+            #     -o ~/.docker/cli-plugins/docker-rollout
+            #   chmod +x ~/.docker/cli-plugins/docker-rollout
+            # fi
 
             # ── 2. Sync code ──────────────────────────────────────────────
             PROJECT_ROOT="/root/app"
@@ -76,7 +79,6 @@ jobs:
             git remote set-url origin "$REPO_URL"
             git fetch origin staging
             git reset --hard origin/staging
-            
 
             cd "$DOCKER_DIR"
 
@@ -108,10 +110,12 @@ jobs:
             docker compose run --rm app alembic upgrade head
             echo "✅ Migrations done"
 
-            # ── 6. Zero-downtime rollout ───────────────────────────────────
-            echo "▶ Rolling out app..."
-            docker rollout app
-            echo "✅ App rolled out"
+            # ── 6. Recreate app with brief downtime (NO overlap) ──────────
+            # Standard recreate: stops old container before starting new one.
+            # Downtime is typically 10–30 seconds but is RAM-safe.
+            echo "▶ Recreating app..."
+            docker compose up -d --no-deps --build app
+            echo "✅ App recreated"
 
             # ── 7. Restart celery worker ──────────────────────────────────
             echo "▶ Restarting celery..."
