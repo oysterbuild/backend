@@ -1,3 +1,4 @@
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 import uvicorn
@@ -51,6 +52,10 @@ async def lifespan(app: FastAPI):
 
 _is_production = settings.environment.lower() == "production"
 
+# Fail fast: a blank/whitespace JWT secret would make tokens forgeable.
+if not settings.jwt_secret.strip() or not settings.jwt_algorithm.strip():
+    raise RuntimeError("JWT_SECRET_KEY and JWT_ALGORITHM must be set")
+
 app = FastAPI(
     title=settings.app_name,
     description="API for Oysterbuild",
@@ -58,6 +63,7 @@ app = FastAPI(
     lifespan=lifespan,
     docs_url=None if _is_production else "/docs",
     redoc_url=None if _is_production else "/redoc",
+    openapi_url=None if _is_production else "/openapi.json",
 )
 
 # Restrict which hosts can hit your API at all
@@ -65,14 +71,20 @@ app.add_middleware(
     TrustedHostMiddleware,
     allowed_hosts=[
         "oysterbuild.pm",
-        "localhost",
-        "app",
+        "www.oysterbuild.pm",
         "periscopebyoysterbuild.com",
+        "www.periscopebyoysterbuild.com",
+        "app",  # Caddy health checks / internal calls
+        "localhost",  # Docker healthcheck (curl localhost:8000)
     ],
 )
 
-# Trust the proxy — only trust your Caddy container IP
-app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+# Only trust X-Forwarded-* from the internal Docker network (where Caddy lives).
+# The subnet is pinned in docker-compose.yml; override with TRUSTED_PROXY_CIDR.
+app.add_middleware(
+    ProxyHeadersMiddleware,
+    trusted_hosts=os.getenv("TRUSTED_PROXY_CIDR", "172.28.0.0/16"),
+)
 
 
 app.include_router(api_v1_router)
@@ -134,21 +146,17 @@ def health_check():
     return {"status": "ok"}
 
 
-@app.get("/debug/ip")
-async def get_ip(req: Request):
-    client_ip = (
-        req.headers.get("CF-Connecting-IP")  # real IP from Cloudflare
-        or req.headers.get("X-Real-IP")
-        or req.headers.get("X-Forwarded-For")
-        or req.client.host
-    )
-    return {
-        "real_ip": client_ip,
-        "cf_connecting_ip": req.headers.get("CF-Connecting-IP"),
-        "x_real_ip": req.headers.get("X-Real-IP"),
-        "x_forwarded_for": req.headers.get("X-Forwarded-For"),
-        "client_host": req.client.host,
-    }
+if not _is_production:
+
+    @app.get("/debug/ip")
+    async def get_ip(req: Request):
+        # After ProxyHeadersMiddleware, req.client.host is the real client IP.
+        return {
+            "client_host": req.client.host if req.client else None,
+            "cf_connecting_ip": req.headers.get("CF-Connecting-IP"),
+            "x_real_ip": req.headers.get("X-Real-IP"),
+            "x_forwarded_for": req.headers.get("X-Forwarded-For"),
+        }
 
 
 @app.get("/redis_health")
