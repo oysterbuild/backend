@@ -61,7 +61,7 @@ app = FastAPI(
     description="API for Oysterbuild",
     version="1.0.0",
     lifespan=lifespan,
-    docs_url=None if _is_production else "/docs",
+    docs_url="/docs" if _is_production else "/docs",
     redoc_url=None if _is_production else "/redoc",
     openapi_url=None if _is_production else "/openapi.json",
 )
