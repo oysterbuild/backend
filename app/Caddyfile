@@ -7,7 +7,7 @@
 	}
 }
 
-oysterbuild.pm, www.oysterbuild.pm, periscopebyoysterbuild.com, www.periscopebyoysterbuild.com {
+oysterbuild.pm, www.oysterbuild.pm {
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options "nosniff"
