@@ -28,6 +28,11 @@ jobs:
 
       - name: Run basic app smoke test
         working-directory: app
+        env:
+          # Dummy values: only used to import the app in CI, never deployed
+          JWT_SECRET_KEY: ci-smoke-test-dummy-secret
+          JWT_ALGORITHM: HS256
+          ENVIRONMENT: ci
         run: |
           python - <<EOF
           print("Running smoke test...")
