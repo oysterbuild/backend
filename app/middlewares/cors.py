@@ -16,17 +16,20 @@ def setup_cors(app: FastAPI) -> None:
     # In development, this might be a single origin like http://localhost:3000
     # In production, this would be your frontend domain(s)
     allowed_origins = [
-        "http://localhost:3000",
         "https://oysterbuild.pm",
+        "https://www.oysterbuild.pm",
         "https://periscopebyoysterbuild.com",
+        "https://www.periscopebyoysterbuild.com",
     ]
+    if settings.environment.lower() != "production":
+        allowed_origins.append("http://localhost:3000")
 
     # Add CORS middleware
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins,
         allow_credentials=True,
-        allow_methods=["*"],  # You can restrict to specific HTTP methods if needed
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=[
             "Authorization",
             "Content-Type",
