@@ -3,7 +3,8 @@ name: Deploy Oysterbuild to Hostinger VPS
 on:
   push:
     branches:
-      - staging
+      - unknown
+      # - staging
 
 jobs:
   test:
@@ -86,7 +87,7 @@ jobs:
             cat > .env <<'ENVEOF'
             ASYNC_DATABASE_URL=${{ secrets.ASYNC_DATABASE_URL }}
             DATABASE_URL=${{ secrets.DATABASE_URL }}
-            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            JWT_SECRET_KEY=${{ secrets.JWT_SECRET }}
             JWT_ALGORITHM=${{ secrets.JWT_ALGORITHM }}
             REDIS_URL=${{ secrets.REDIS_URL }}
             CLOUDINARY_CLOUD_NAME=${{ secrets.CLOUDINARY_CLOUD_NAME }}
