@@ -3,7 +3,8 @@ name: Deploy Oysterbuild to Hostinger VPS
 on:
   push:
     branches:
-      - staging
+      - unknown
+      # - staging
 
 jobs:
   test:
