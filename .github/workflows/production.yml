@@ -27,6 +27,11 @@ jobs:
 
       - name: Run basic app smoke test
         working-directory: app
+        env:
+          # Dummy values: only used to import the app in CI, never deployed
+          JWT_SECRET_KEY: ci-smoke-test-dummy-secret
+          JWT_ALGORITHM: HS256
+          ENVIRONMENT: ci
         run: |
           python - <<EOF
           print("Running smoke test...")
@@ -92,7 +97,7 @@ jobs:
             cat > .env <<EOF
             ASYNC_DATABASE_URL=${{ secrets.PROD_ASYNC_DATABASE_URL }}
             DATABASE_URL=${{ secrets.PROD_DATABASE_URL }}
-            JWT_SECRET=${{ secrets.PROD_JWT_SECRET }}
+            JWT_SECRET_KEY=${{ secrets.PROD_JWT_SECRET }}
             JWT_ALGORITHM=${{ secrets.JWT_ALGORITHM }}
             REDIS_URL=${{ secrets.REDIS_URL }}
             CLOUDINARY_CLOUD_NAME=${{ secrets.CLOUDINARY_CLOUD_NAME }}

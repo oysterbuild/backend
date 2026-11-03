@@ -12,7 +12,6 @@ app/**/*.egg-info/
 venv/
 env/
 ENV/
-.env
 
 app/env.txt
 env.txt
@@ -44,7 +43,6 @@ temp_auto_push.bat
 Thumbs.db
 
 # Environment variables
-.env
 .dev/
 app/**/.env.local
 app/**/.env.development
@@ -80,3 +78,5 @@ app/__pycache__
 
 app/celerybeat-schedule.gitignore
 branch_structure.json
+config.bat
+node_modules
