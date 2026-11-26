@@ -72,8 +72,7 @@ app/**/coverage.xml
 # Temporary files
 /tmp/
 
-verify_qr.py # This is a test file at my end, do not delete (iamAgbaCoder)
-qr.txt # Same as this 
+
 
 app/**/.__pycache__/
 app/__pycache__  
