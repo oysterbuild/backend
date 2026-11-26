@@ -3,7 +3,7 @@ services:
   app:
     build: .
     # Migrations removed from here — now run as a one-shot in CI before rollout
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --workers 2
+    command: gunicorn main:app -k uvicorn.workers.UvicornWorker --workers 2 --bind 0.0.0.0:8000 --timeout 120 --graceful-timeout 30 --keep-alive 5
     restart: unless-stopped
     expose:
       - "8000"
@@ -14,7 +14,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
-      start_period: 15s  #Bumped to 15s — gives uvicorn enough time to boot
+      start_period: 15s #Bumped to 15s — gives uvicorn enough time to boot
     depends_on:
       redis:
         condition: service_healthy
@@ -57,7 +57,7 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-        
+
   # --- Redis ---
   redis:
     image: redis:7-alpine
@@ -119,4 +119,3 @@ volumes:
   redis_data:
   caddy_data:
   caddy_config:
-

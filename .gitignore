@@ -12,6 +12,7 @@ app/**/*.egg-info/
 venv/
 env/
 ENV/
+.env
 
 app/env.txt
 env.txt
@@ -34,15 +35,16 @@ app/**/*.log
 
 # IDE specific files
 .idea/
+.vscode/
 *.swp
 *.swo
 
-temp_auto_push.bat
 # OS specific files
 .DS_Store
 Thumbs.db
 
 # Environment variables
+.env
 .dev/
 app/**/.env.local
 app/**/.env.development
@@ -70,13 +72,9 @@ app/**/coverage.xml
 # Temporary files
 /tmp/
 
-verify_qr.py # This is a test file at my end, do not delete (iamAgbaCoder)
-qr.txt # Same as this 
+
 
 app/**/.__pycache__/
 app/__pycache__  
 
-app/celerybeat-schedule.gitignore
-branch_structure.json
-config.bat
-node_modules
+app/celerybeat-schedule

@@ -3,7 +3,8 @@ name: Deploy Oysterbuild to Hostinger VPS
 on:
   push:
     branches:
-      - staging
+      - unknown
+      # - staging
 
 jobs:
   test:
@@ -25,9 +26,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-
       - name: Run basic app smoke test
         working-directory: app
+        env:
+          # Dummy values: only used to import the app in CI, never deployed
+          JWT_SECRET_KEY: ci-smoke-test-dummy-secret
+          JWT_ALGORITHM: HS256
+          ENVIRONMENT: ci
         run: |
           python - <<EOF
           print("Running smoke test...")
@@ -55,13 +60,17 @@ jobs:
           script: |
             set -e
 
-            # ── 1. Install docker-rollout if missing ──────────────────────
-            mkdir -p ~/.docker/cli-plugins
-            if [ ! -f ~/.docker/cli-plugins/docker-rollout ]; then
-              curl -fsSL https://raw.githubusercontent.com/wowu/docker-rollout/main/docker-rollout \
-                -o ~/.docker/cli-plugins/docker-rollout
-              chmod +x ~/.docker/cli-plugins/docker-rollout
-            fi
+            # ── 1. docker-rollout plugin (DISABLED for low-RAM VPS) ─────
+            # docker-rollout briefly runs two app containers simultaneously.
+            # On 1 CPU / 2 GB (or similar small VPSes) this causes OOM kills.
+            # Re-enable only after upgrading to at least 2 CPU / 4 GB RAM.
+            #
+            # mkdir -p ~/.docker/cli-plugins
+            # if [ ! -f ~/.docker/cli-plugins/docker-rollout ]; then
+            #   curl -fsSL https://raw.githubusercontent.com/wowu/docker-rollout/main/docker-rollout \
+            #     -o ~/.docker/cli-plugins/docker-rollout
+            #   chmod +x ~/.docker/cli-plugins/docker-rollout
+            # fi
 
             # ── 2. Sync code ──────────────────────────────────────────────
             PROJECT_ROOT="/root/app"
@@ -76,7 +85,6 @@ jobs:
             git remote set-url origin "$REPO_URL"
             git fetch origin staging
             git reset --hard origin/staging
-            
 
             cd "$DOCKER_DIR"
 
@@ -84,14 +92,14 @@ jobs:
             cat > .env <<'ENVEOF'
             ASYNC_DATABASE_URL=${{ secrets.ASYNC_DATABASE_URL }}
             DATABASE_URL=${{ secrets.DATABASE_URL }}
-            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            JWT_SECRET_KEY=${{ secrets.JWT_SECRET }}
             JWT_ALGORITHM=${{ secrets.JWT_ALGORITHM }}
             REDIS_URL=${{ secrets.REDIS_URL }}
             CLOUDINARY_CLOUD_NAME=${{ secrets.CLOUDINARY_CLOUD_NAME }}
             CLOUDINARY_API_KEY=${{ secrets.CLOUDINARY_API_KEY }}
             CLOUDINARY_API_SECRET=${{ secrets.CLOUDINARY_API_SECRET }}
-            SENDGRID_API_KEY=${{ secrets.SENDGRID_API_KEY }}
-            SENDGRID_FROM_EMAIL=${{ secrets.SENDGRID_FROM_EMAIL }}
+            RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}
+            RESEND_FROM_EMAIL=${{ secrets.RESEND_FROM_EMAIL }}
             PAYSTACK_SECRET_KEY=${{ secrets.PAYSTACK_SECRET_KEY }}
             PAYSTACK_PUBLIC_KEY=${{ secrets.PAYSTACK_PUBLIC_KEY }}
             STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }}
@@ -108,10 +116,12 @@ jobs:
             docker compose run --rm app alembic upgrade head
             echo "✅ Migrations done"
 
-            # ── 6. Zero-downtime rollout ───────────────────────────────────
-            echo "▶ Rolling out app..."
-            docker rollout app
-            echo "✅ App rolled out"
+            # ── 6. Recreate app with brief downtime (NO overlap) ──────────
+            # Standard recreate: stops old container before starting new one.
+            # Downtime is typically 10–30 seconds but is RAM-safe.
+            echo "▶ Recreating app..."
+            docker compose up -d --no-deps --build app
+            echo "✅ App recreated"
 
             # ── 7. Restart celery worker ──────────────────────────────────
             echo "▶ Restarting celery..."

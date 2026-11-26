@@ -42,7 +42,5 @@ class ErrorHandler(BaseHTTPMiddleware):
                 content={
                     "success": False,
                     "message": "An unexpected error occurred",
-                    "error": str(e),
-                    "error_type": e.__class__.__name__,
                 },
             )

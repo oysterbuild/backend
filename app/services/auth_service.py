@@ -1,6 +1,7 @@
+from re import A
 from fastapi import HTTPException, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.exc import SQLAlchemyError
 from datetime import datetime, timezone, timedelta
 
@@ -12,6 +13,7 @@ from dependencies.auth import create_access_token
 from schemas.auth_schema import AuthResponse, UserResponse
 from services.email_service import get_email_service
 from constant.email_content import EMAIL_CONSTANT
+from services.permission_service import PermissionService
 
 logger = setup_logger("Auth_Service")
 
@@ -22,6 +24,7 @@ class AuthService:
     def __init__(self, database: AsyncSession):
         self.db = database
         self.email_service = get_email_service()
+        self.perms_role = PermissionService(database)
         # self.background_task = BackgroundTasks()
 
     # ------------------------------------------------------------------
@@ -356,6 +359,65 @@ class AuthService:
 
         except Exception:
             logger.exception("Unexpected error | profile update | %s", user_id)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Internal server error",
+            )
+
+    async def get_all_users(self, user_id: str, page: int = 1, limit: int = 20) -> dict:
+        logger.info(
+            "Fetching all users | requested_by=%s | page=%d | limit=%d",
+            user_id,
+            page,
+            limit,
+        )
+        try:
+            # check permission
+            if not await self.perms_role.is_system_admin(user_id):
+                logger.warning(
+                    "Permission denied | get_all_users | user_id=%s", user_id
+                )
+                raise HTTPException(
+                    status_code=403,
+                    detail="Permission Denied.Super Admin Permission is Required",
+                )
+
+            page = max(page, 1)
+            limit = min(limit, 20)
+            offset = (page - 1) * limit
+
+            base_stmt = select(User)
+
+            count_stmt = select(func.count()).select_from(base_stmt.subquery())
+            total_result = await self.db.execute(count_stmt)
+            total = total_result.scalar_one()
+
+            users_stmt = base_stmt.offset(offset).limit(limit)
+            users_result = await self.db.execute(users_stmt)
+            users = users_result.scalars().all()
+
+            logger.info(
+                "Fetched users successfully | requested_by=%s | page=%d | limit=%d | returned=%d | total=%d",
+                user_id,
+                page,
+                limit,
+                len(users),
+                total,
+            )
+
+            return {
+                "meta_data": {"limit": limit, "page": page, "total": total},
+                "data": [
+                    UserResponse.model_validate(user).model_dump() for user in users
+                ],
+                "message": "Users fetched successfully",
+            }
+
+        except HTTPException:
+            raise
+
+        except Exception:
+            logger.exception("Unexpected error | get_all_users | user_id=%s", user_id)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Internal server error",

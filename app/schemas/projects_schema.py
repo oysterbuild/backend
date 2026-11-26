@@ -133,6 +133,7 @@ class ProjectSetupUpdateDto(BaseModel):
 
         return values
 
+
 class UpdateProjectForm:
     def __init__(
         self,
@@ -145,7 +146,7 @@ class UpdateProjectForm:
         end_date: Optional[date] = Form(None, description="Format: YYYY-MM-DD"),
         budget: Optional[float] = Form(None),
         budget_currency: Optional[Literal["NGN", "USD"]] = Form(None),
-        status: Optional[Literal["Active","Pending", "Draft"]] = Form(None),
+        status: Optional[Literal["Active", "Pending", "Draft"]] = Form(None),
         plan_id: Optional[UUID] = Form(None),
         preferred_inspection_days: Optional[List[WeekdayEnum]] = Form(None),
         preferred_inspection_window: Optional[InspectionWindowEnum] = Form(None),
@@ -165,3 +166,15 @@ class UpdateProjectForm:
         self.preferred_inspection_days = preferred_inspection_days
         self.preferred_inspection_window = preferred_inspection_window
         self.existing_image_ids = existing_image_ids
+
+
+class ProjectSetupWithAssigneeDto(ProjectSetupDto):
+    assignee_user_id: Optional[UUID] = Field(
+        None, description="ID of the user assigned to the project"
+    )
+
+
+class ProjectAssignUpdateDto(ProjectSetupUpdateDto):
+    assignee_user_id: Optional[UUID] = Field(
+        None, description="ID of the user assigned to the project"
+    )
