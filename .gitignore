@@ -71,14 +71,9 @@ app/**/coverage.xml
 # Temporary files
 /tmp/
 
-verify_qr.py # This is a test file at my end, do not delete (iamAgbaCoder)
-qr.txt # Same as this 
+
 
 app/**/.__pycache__/
 app/__pycache__  
 
 app/celerybeat-schedule
-branch_structure.json
-temp_auto_push.bat
-temp_interactive_push.bat
-.gitignore
