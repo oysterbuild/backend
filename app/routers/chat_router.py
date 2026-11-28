@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Optional
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect, status
 from jwt.exceptions import ExpiredSignatureError, PyJWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +20,7 @@ from services.chat_service import ChatService, _channel
 from settings import get_settings
 from utils.db_setup import AsyncSessionLocal, get_database
 from utils.loggers import setup_logger
+from middlewares.limiter import limiter
 from utils.redis_client import redis_client
 
 router = APIRouter(prefix="/chat")
@@ -37,7 +38,9 @@ def get_chat_service(db: AsyncSession = Depends(get_database)) -> ChatService:
 
 
 @router.post("/{project_id}/messages", status_code=status.HTTP_201_CREATED)
+@limiter.limit("30/minute")
 async def send_message(
+    request: Request,
     project_id: str,
     payload: SendMessageDTO,
     chat_service: ChatService = Depends(get_chat_service),

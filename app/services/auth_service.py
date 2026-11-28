@@ -1,4 +1,3 @@
-from re import A
 from fastapi import HTTPException, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -116,6 +115,13 @@ class AuthService:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Please verify your email before login",
+                )
+
+            if not user.is_active:
+                logger.warning("Login blocked | account inactive | %s", email)
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Your account is inactive. Please contact support.",
                 )
 
             logger.info("Login successful | user_id=%s", user.id)
