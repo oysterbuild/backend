@@ -18,6 +18,8 @@ from utils.redis_client import redis_client
 from middlewares.cors import setup_cors
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+from slowapi.errors import RateLimitExceeded
+from middlewares.limiter import limiter
 
 # from utils import cloudinary
 
@@ -85,6 +87,21 @@ app.add_middleware(
     ProxyHeadersMiddleware,
     trusted_hosts=os.getenv("TRUSTED_PROXY_CIDR", "172.28.0.0/16"),
 )
+
+
+app.state.limiter = limiter
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_exception_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        content={
+            "success": False,
+            "statusCode": status.HTTP_429_TOO_MANY_REQUESTS,
+            "message": f"Too many requests. Limit is {exc.detail}. Please try again later.",
+        },
+    )
 
 
 app.include_router(api_v1_router)

@@ -22,6 +22,7 @@ from utils.file_upload import upload_file_optimized
 from settings import get_settings
 from services.plan_service import PlansService
 from utils.loggers import setup_logger
+from middlewares.limiter import limiter
 
 router = APIRouter(prefix="/payment")
 
@@ -40,7 +41,9 @@ def get_plan_service(db: AsyncSession = Depends(get_database)) -> PaymentService
 
 
 @router.post("/invoice")
+@limiter.limit("10/minute")
 async def roles(
+    request: Request,
     invoice_id: str = File(..., description="invoice id"),
     provider: Literal["PAYSTACK", "FLUTTERWAVE", "STRIPE"] = File(
         ..., examples=["PAYSTACK", "FLUTTERWAVE", "STRIPE"]
