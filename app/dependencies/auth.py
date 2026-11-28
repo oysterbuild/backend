@@ -97,6 +97,13 @@ async def get_current_user(
                 detail="Invalid Token, Authentication has Expired Please Login",
             )
 
+        if user_data.is_active is False:
+            logger.warning(f"Inactive user attempted access: {user_id}")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Your account is inactive. Please contact support.",
+            )
+
         return UserResponse.model_validate(user_data).model_dump()
 
     except ExpiredSignatureError:

@@ -20,6 +20,7 @@ class User(BaseModel):
     email = Column(String(500), nullable=False, unique=True, index=True)
     phone_number = Column(String(15), nullable=True, unique=False)
     password = Column(String(500), nullable=False)
+    is_active = Column(Boolean(), default=True)
     is_email_verified = Column(Boolean(), default=False)
     image_url = Column(Text, nullable=True)
     role = Column(

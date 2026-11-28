@@ -9,6 +9,7 @@ from fastapi import (
     Form,
     File,
     HTTPException,
+    Request,
     Query,
 )
 from httpx import _status_codes
@@ -32,6 +33,7 @@ from typing import List, Optional, Literal
 from datetime import datetime, timezone
 from uuid import UUID
 from utils.loggers import setup_logger
+from middlewares.limiter import limiter
 from services.cloudinary_service import get_cloudinary, CloudinaryService
 
 router = APIRouter(prefix="/projects")
@@ -49,7 +51,9 @@ def get_project_service(
 
 
 @router.post("", response_model=SuccessResponse)
+@limiter.limit("10/minute")
 async def create_project(
+    request: Request,
     project_data: str = Form(
         ...,
         description="JSON payload for project data",
@@ -483,8 +487,11 @@ async def delete_single_report(
 
 
 @router.get("/reports/upload/presigned-url")
+@limiter.limit("20/minute")
 async def generate_presigned_url(
+    request: Request,
     cloud_service: CloudinaryService = Depends(get_cloudinary),
+    current_user: dict = Depends(get_current_user),
 ):
     try:
         # DEFAULT TO REPORT
