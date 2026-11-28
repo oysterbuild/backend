@@ -9,6 +9,7 @@ from fastapi import (
     Form,
     File,
     HTTPException,
+    Request,
 )
 from httpx import _status_codes
 from schemas.auth_schema import (
@@ -29,6 +30,7 @@ from utils.db_setup import get_database
 from dependencies.auth import get_current_user
 from utils.file_upload import upload_file_optimized
 from utils.loggers import setup_logger
+from middlewares.limiter import limiter
 
 
 router = APIRouter(prefix="/auth")
@@ -40,7 +42,9 @@ def get_auth_service(db: AsyncSession = Depends(get_database)) -> AuthService:
 
 
 @router.post("/sign-up", response_model=SuccessResponse)
+@limiter.limit("10/hour")
 async def sign_up(
+    request: Request,
     request_body: SignupRequest, auth_service: AuthService = Depends(get_auth_service)
 ):
     try:
@@ -62,7 +66,9 @@ async def sign_up(
 
 
 @router.post("/sign-in", response_model=SuccessResponse)
+@limiter.limit("5/minute;20/hour")
 async def sign_in(
+    request: Request,
     request_body: LoginRequest, auth_service: AuthService = Depends(get_auth_service)
 ):
     try:
@@ -83,7 +89,9 @@ async def sign_in(
         )
 
 @router.post("/email-verification", response_model=SuccessResponse)
+@limiter.limit("5/minute")
 async def email_verification(
+    request: Request,
     request_body: EmailVerificationRequest,
     auth_service: AuthService = Depends(get_auth_service),
 ):
@@ -106,7 +114,9 @@ async def email_verification(
 
 
 @router.post("/send-otp")
+@limiter.limit("3/minute;10/hour")
 async def send_otp_pin(
+    request: Request,
     request_data: SendOTPRequest,  # Email is now in the body, safer for logs
     background_tasks: BackgroundTasks,
     auth_service: AuthService = Depends(get_auth_service),
@@ -130,7 +140,9 @@ async def send_otp_pin(
 
 
 @router.post("/forget-password", response_model=SuccessResponse)
+@limiter.limit("5/15minutes")
 async def forget_password(
+    request: Request,
     request_body: ForgetPasswordRequest,
     auth_service: AuthService = Depends(get_auth_service),
 ):
@@ -152,7 +164,9 @@ async def forget_password(
 
 
 @router.post("/reset-password", response_model=SuccessResponse)
+@limiter.limit("5/15minutes")
 async def reset_passoword(
+    request: Request,
     request_body: ResetPasswordRequest,
     auth_service: AuthService = Depends(get_auth_service),
     current_user: dict = Depends(get_current_user),
@@ -195,7 +209,9 @@ async def get_user_me(current_user: dict = Depends(get_current_user)):
 
 
 @router.put("/user/me", response_model=SuccessResponse)
+@limiter.limit("10/minute")
 async def user_me(
+    request: Request,
     first_name: str = Form(None, description="Your First Name John"),
     last_name: str = Form(None, description="Your Last Name Doe"),
     profile_image: UploadFile = File(None, description="Upload User Profile"),
